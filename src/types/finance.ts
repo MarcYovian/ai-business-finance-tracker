@@ -1,4 +1,4 @@
-export type TransactionType = 'income' | 'expense';
+export type TransactionType = 'income' | 'expense' | 'transfer';
 
 export interface User {
   id: string;
@@ -30,7 +30,8 @@ export interface Transaction {
   createdAt: string;
   userId: string;
   categoryId?: string;
-  fundSourceId?: string;
+  sourceFundId?: string;
+  destinationFundId?: string;
 }
 
 export interface AIResponse {
@@ -41,4 +42,6 @@ export interface AIResponse {
   date?: string;
   category?: string;
   fundSource?: string;
+  sourceFund?: string;
+  destinationFund?: string;
 }

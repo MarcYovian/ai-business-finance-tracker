@@ -18,9 +18,9 @@ describe('Insights generation', () => {
 
   it('identifies largest expense category', () => {
     const transactions: Transaction[] = [
-      { id: 't1', description: 'Lunch', amount: 3000, type: 'expense', transactionDate: '2023-01-01', createdAt: '2023-01-01', userId: 'user1', categoryId: 'cat1' },
-      { id: 't2', description: 'Dinner', amount: 5000, type: 'expense', transactionDate: '2023-01-02', createdAt: '2023-01-02', userId: 'user1', categoryId: 'cat1' },
-      { id: 't3', description: 'Pens', amount: 2000, type: 'expense', transactionDate: '2023-01-03', createdAt: '2023-01-03', userId: 'user1', categoryId: 'cat2' },
+      { id: 't1', description: 'Lunch', amount: 3000000, type: 'expense', transactionDate: '2023-01-01', createdAt: '2023-01-01', userId: 'user1', categoryId: 'cat1' },
+      { id: 't2', description: 'Dinner', amount: 5000000, type: 'expense', transactionDate: '2023-01-02', createdAt: '2023-01-02', userId: 'user1', categoryId: 'cat1' },
+      { id: 't3', description: 'Pens', amount: 2000000, type: 'expense', transactionDate: '2023-01-03', createdAt: '2023-01-03', userId: 'user1', categoryId: 'cat2' },
     ];
     
     const insights = generateInsights(transactions, mockCategories);
@@ -28,13 +28,13 @@ describe('Insights generation', () => {
     
     expect(biggestExpenseInsight).toBeDefined();
     expect(biggestExpenseInsight?.description).toContain('Food');
-    expect(biggestExpenseInsight?.description).toContain('$80.00');
+    expect(biggestExpenseInsight?.description).toContain('Rp\u00A080.000');
   });
 
   it('reports when expenses exceed income', () => {
     const transactions: Transaction[] = [
-      { id: 't1', description: 'Salary', amount: 50000, type: 'income', transactionDate: '2023-01-01', createdAt: '2023-01-01', userId: 'user1' },
-      { id: 't2', description: 'Rent', amount: 60000, type: 'expense', transactionDate: '2023-01-02', createdAt: '2023-01-02', userId: 'user1' },
+      { id: 't1', description: 'Salary', amount: 5000000, type: 'income', transactionDate: '2023-01-01', createdAt: '2023-01-01', userId: 'user1' },
+      { id: 't2', description: 'Rent', amount: 6000000, type: 'expense', transactionDate: '2023-01-02', createdAt: '2023-01-02', userId: 'user1' },
     ];
     
     const insights = generateInsights(transactions, mockCategories);
@@ -46,8 +46,8 @@ describe('Insights generation', () => {
 
   it('reports positive financial health when income exceeds expenses', () => {
     const transactions: Transaction[] = [
-      { id: 't1', description: 'Salary', amount: 80000, type: 'income', transactionDate: '2023-01-01', createdAt: '2023-01-01', userId: 'user1' },
-      { id: 't2', description: 'Groceries', amount: 30000, type: 'expense', transactionDate: '2023-01-02', createdAt: '2023-01-02', userId: 'user1' },
+      { id: 't1', description: 'Salary', amount: 8000000, type: 'income', transactionDate: '2023-01-01', createdAt: '2023-01-01', userId: 'user1' },
+      { id: 't2', description: 'Groceries', amount: 3000000, type: 'expense', transactionDate: '2023-01-02', createdAt: '2023-01-02', userId: 'user1' },
     ];
     
     const insights = generateInsights(transactions, mockCategories);
@@ -59,16 +59,16 @@ describe('Insights generation', () => {
 
   it('identifies largest recent expense', () => {
     const transactions: Transaction[] = [
-      { id: 't1', description: 'Coffee', amount: 500, type: 'expense', transactionDate: '2023-01-01', createdAt: '2023-01-01', userId: 'user1', categoryId: 'cat1' },
-      { id: 't2', description: 'Dinner', amount: 8000, type: 'expense', transactionDate: '2023-01-02', createdAt: '2023-01-02', userId: 'user1', categoryId: 'cat1' },
-      { id: 't3', description: 'Lunch', amount: 3000, type: 'expense', transactionDate: '2023-01-03', createdAt: '2023-01-03', userId: 'user1', categoryId: 'cat2' },
+      { id: 't1', description: 'Coffee', amount: 50000, type: 'expense', transactionDate: '2023-01-01', createdAt: '2023-01-01', userId: 'user1', categoryId: 'cat1' },
+      { id: 't2', description: 'Dinner', amount: 800000, type: 'expense', transactionDate: '2023-01-02', createdAt: '2023-01-02', userId: 'user1', categoryId: 'cat1' },
+      { id: 't3', description: 'Lunch', amount: 300000, type: 'expense', transactionDate: '2023-01-03', createdAt: '2023-01-03', userId: 'user1', categoryId: 'cat2' },
     ];
     
     const insights = generateInsights(transactions, mockCategories);
     const largestExpenseInsight = insights.find(i => i.title === 'Largest Recent Expense');
     
     expect(largestExpenseInsight).toBeDefined();
-    expect(largestExpenseInsight?.description).toContain('$80.00');
+    expect(largestExpenseInsight?.description).toContain('Rp\u00A08.000');
     expect(largestExpenseInsight?.description).toContain('Dinner');
   });
 });

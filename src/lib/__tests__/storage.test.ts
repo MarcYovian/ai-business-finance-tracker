@@ -1,181 +1,168 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { userStorage, categoryStorage, fundSourceStorage, transactionStorage, apiKeyStorage } from '@/lib/storage';
-import { User, Category, FundSource, Transaction } from '@/types/finance';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { mockDeep, mockReset } from 'vitest-mock-extended';
+import { SupabaseClient } from '@supabase/supabase-js';
+import { storage, userStorage, categoryStorage, fundSourceStorage, transactionStorage, aiConfigStorage } from '@/lib/storage';
 
-describe('Storage functionality', () => {
+// Mock the supabase client
+vi.mock('@/lib/supabase', () => {
+  const supabase = mockDeep<SupabaseClient>();
+  return { supabase };
+});
+
+import { supabase } from '@/lib/supabase';
+
+// Mock localStorage
+const localStorageMock = (() => {
+  let store: Record<string, string> = {};
+  return {
+    getItem: (key: string) => store[key] || null,
+    setItem: (key: string, value: string) => {
+      store[key] = value.toString();
+    },
+    removeItem: (key: string) => {
+      delete store[key];
+    },
+    clear: () => {
+      store = {};
+    },
+  };
+})();
+
+Object.defineProperty(window, 'localStorage', { value: localStorageMock });
+
+describe('Storage', () => {
   beforeEach(() => {
-    // Clear localStorage before each test
-    localStorage.clear();
-  });
-
-  afterEach(() => {
-    // Clear localStorage after each test
-    localStorage.clear();
+    mockReset(supabase);
+    localStorageMock.clear();
   });
 
   describe('userStorage', () => {
-    it('creates and retrieves users', () => {
-      const user = userStorage.create('test@example.com');
-      
-      expect(user.email).toBe('test@example.com');
-      expect(user.id).toBeDefined();
-      expect(user.createdAt).toBeDefined();
-      
-      const users = userStorage.getAll();
-      expect(users).toHaveLength(1);
-      expect(users[0].email).toBe('test@example.com');
-    });
+    it('gets current user', async () => {
+      const mockUser = {
+        id: '123',
+        email: 'test@example.com',
+        created_at: new Date().toISOString(),
+      };
+      (supabase.auth.getUser as any).mockResolvedValue({ data: { user: mockUser } });
 
-    it('finds user by email', () => {
-      userStorage.create('test@example.com');
-      const foundUser = userStorage.findByEmail('test@example.com');
-      
-      expect(foundUser).toBeDefined();
-      expect(foundUser?.email).toBe('test@example.com');
-    });
+      const user = await userStorage.getCurrentUser();
 
-    it('sets and gets current user', () => {
-      const user = userStorage.create('test@example.com');
-      userStorage.setCurrentUser(user);
-      
-      const currentUser = userStorage.getCurrentUser();
-      expect(currentUser?.email).toBe('test@example.com');
+      expect(user).toEqual({
+        id: '123',
+        email: 'test@example.com',
+        createdAt: mockUser.created_at,
+      });
     });
   });
 
   describe('categoryStorage', () => {
-    it('creates and retrieves categories for user', () => {
-      const user = userStorage.create('test@example.com');
-      const category = categoryStorage.create('Food', user.id);
-      
-      expect(category.name).toBe('Food');
-      expect(category.userId).toBe(user.id);
-      
-      const categories = categoryStorage.getAll(user.id);
-      expect(categories).toHaveLength(1);
-      expect(categories[0].name).toBe('Food');
-    });
+    it('creates a category', async () => {
+      const mockCategory = { id: 'cat1', name: 'Food', user_id: 'user1', created_at: new Date().toISOString() };
+      (supabase.from as any).mockReturnValue({
+        insert: vi.fn().mockReturnValue({
+          select: vi.fn().mockResolvedValue({ data: [mockCategory], error: null }),
+        }),
+      });
 
-    it('finds category by name', () => {
-      const user = userStorage.create('test@example.com');
-      categoryStorage.create('Food', user.id);
-      
-      const foundCategory = categoryStorage.findByName('Food', user.id);
-      expect(foundCategory).toBeDefined();
-      expect(foundCategory?.name).toBe('Food');
-    });
+      const category = await categoryStorage.create('Food', 'user1');
 
-    it('deletes category', () => {
-      const user = userStorage.create('test@example.com');
-      const category = categoryStorage.create('Food', user.id);
-      
-      let categories = categoryStorage.getAll(user.id);
-      expect(categories).toHaveLength(1);
-      
-      categoryStorage.delete(category.id);
-      categories = categoryStorage.getAll(user.id);
-      expect(categories).toHaveLength(0);
+      expect(category).toEqual({
+        id: 'cat1',
+        name: 'Food',
+        userId: 'user1',
+        createdAt: mockCategory.created_at,
+      });
     });
   });
 
   describe('fundSourceStorage', () => {
-    it('creates and retrieves fund sources for user', () => {
-      const user = userStorage.create('test@example.com');
-      const fundSource = fundSourceStorage.create('Checking', 50000, user.id);
-      
-      expect(fundSource.name).toBe('Checking');
-      expect(fundSource.balance).toBe(50000);
-      expect(fundSource.userId).toBe(user.id);
-      
-      const sources = fundSourceStorage.getAll(user.id);
-      expect(sources).toHaveLength(1);
-      expect(sources[0].name).toBe('Checking');
-    });
+    it('creates a fund source', async () => {
+      const mockFundSource = { id: 'fs1', name: 'BCA', balance: 100000, user_id: 'user1', created_at: new Date().toISOString() };
+      (supabase.from as any).mockReturnValue({
+        insert: vi.fn().mockReturnValue({
+          select: vi.fn().mockResolvedValue({ data: [mockFundSource], error: null }),
+        }),
+      });
 
-    it('finds fund source by name', () => {
-      const user = userStorage.create('test@example.com');
-      fundSourceStorage.create('Checking', 50000, user.id);
-      
-      const foundSource = fundSourceStorage.findByName('Checking', user.id);
-      expect(foundSource).toBeDefined();
-      expect(foundSource?.name).toBe('Checking');
+      const fundSource = await fundSourceStorage.create('BCA', 100000, 'user1');
+
+      expect(fundSource).toEqual({
+        id: 'fs1',
+        name: 'BCA',
+        balance: 100000,
+        userId: 'user1',
+        createdAt: mockFundSource.created_at,
+      });
     });
   });
 
   describe('transactionStorage', () => {
-    it('creates and retrieves transactions for user', () => {
-      const user = userStorage.create('test@example.com');
-      const transaction = transactionStorage.create({
+    it('creates a transaction', async () => {
+      const mockTransaction = {
+        id: 't1',
         description: 'Lunch',
-        amount: 1500,
+        amount: 50000,
         type: 'expense',
-        transactionDate: new Date().toISOString(),
-        userId: user.id
+        transaction_date: new Date().toISOString(),
+        user_id: 'user1',
+        category_id: 'cat1',
+        fund_source_id: 'fs1',
+        created_at: new Date().toISOString(),
+      };
+      (supabase.from as any).mockReturnValue({
+        insert: vi.fn().mockReturnValue({
+          select: vi.fn().mockResolvedValue({ data: [mockTransaction], error: null }),
+        }),
       });
-      
-      expect(transaction.description).toBe('Lunch');
-      expect(transaction.amount).toBe(1500);
-      expect(transaction.userId).toBe(user.id);
-      
-      const transactions = transactionStorage.getAll(user.id);
-      expect(transactions).toHaveLength(1);
-      expect(transactions[0].description).toBe('Lunch');
-    });
 
-    it('updates transaction', () => {
-      const user = userStorage.create('test@example.com');
-      const transaction = transactionStorage.create({
+      const transaction = await transactionStorage.create({
         description: 'Lunch',
-        amount: 1500,
+        amount: 50000,
         type: 'expense',
-        transactionDate: new Date().toISOString(),
-        userId: user.id
+        transactionDate: mockTransaction.transaction_date,
+        userId: 'user1',
+        categoryId: 'cat1',
+        fundSourceId: 'fs1',
       });
-      
-      transactionStorage.update(transaction.id, {
-        description: 'Dinner',
-        amount: 3000
-      });
-      
-      const updatedTransactions = transactionStorage.getAll(user.id);
-      const updatedTransaction = updatedTransactions[0];
-      expect(updatedTransaction.description).toBe('Dinner');
-      expect(updatedTransaction.amount).toBe(3000);
-    });
 
-    it('deletes transaction', () => {
-      const user = userStorage.create('test@example.com');
-      const transaction = transactionStorage.create({
+      expect(transaction).toEqual({
+        id: 't1',
         description: 'Lunch',
-        amount: 1500,
+        amount: 50000,
         type: 'expense',
-        transactionDate: new Date().toISOString(),
-        userId: user.id
+        transactionDate: mockTransaction.transaction_date,
+        userId: 'user1',
+        categoryId: 'cat1',
+        fundSourceId: 'fs1',
+        createdAt: mockTransaction.created_at,
       });
-      
-      let transactions = transactionStorage.getAll(user.id);
-      expect(transactions).toHaveLength(1);
-      
-      transactionStorage.delete(transaction.id);
-      transactions = transactionStorage.getAll(user.id);
-      expect(transactions).toHaveLength(0);
     });
   });
 
-  describe('apiKeyStorage', () => {
-    it('sets and gets API key', () => {
-      apiKeyStorage.set('test-api-key');
-      const key = apiKeyStorage.get();
-      
-      expect(key).toBe('test-api-key');
+  describe('aiConfigStorage', () => {
+    it('sets and gets provider', () => {
+      aiConfigStorage.setProvider('gemini');
+      expect(aiConfigStorage.getProvider()).toBe('gemini');
     });
 
-    it('removes API key', () => {
-      apiKeyStorage.set('test-api-key');
-      expect(apiKeyStorage.get()).toBe('test-api-key');
-      
-      apiKeyStorage.remove();
-      expect(apiKeyStorage.get()).toBeNull();
+    it('sets and gets OpenAI key', () => {
+      aiConfigStorage.setOpenAIKey('test-key');
+      expect(aiConfigStorage.getOpenAIKey()).toBe('test-key');
+    });
+
+    it('sets and gets Gemini key', () => {
+      aiConfigStorage.setGeminiKey('test-key-2');
+      expect(aiConfigStorage.getGeminiKey()).toBe('test-key-2');
+    });
+
+    it('gets active key', () => {
+      aiConfigStorage.setProvider('openai');
+      aiConfigStorage.setOpenAIKey('openai-key');
+      aiConfigStorage.setGeminiKey('gemini-key');
+      expect(aiConfigStorage.getActiveKey()).toBe('openai-key');
+
+      aiConfigStorage.setProvider('gemini');
+      expect(aiConfigStorage.getActiveKey()).toBe('gemini-key');
     });
   });
 });

@@ -74,7 +74,8 @@ export const generateInsights = (
   }
   
   // 4. Recent transaction insights
-  const recentTransactions = [...transactions]
+  const validTransactions = transactions.filter(t => !isNaN(new Date(t.transactionDate).getTime()));
+  const recentTransactions = [...validTransactions]
     .sort((a, b) => new Date(b.transactionDate).getTime() - new Date(a.transactionDate).getTime())
     .slice(0, 10);
   
@@ -100,7 +101,13 @@ export const generateInsights = (
     const monthlyData: Record<string, { income: number, expenses: number }> = {};
     
     transactions.forEach(t => {
-      const month = new Date(t.transactionDate).toISOString().substring(0, 7); // YYYY-MM
+      // Validate the date before processing
+      const date = new Date(t.transactionDate);
+      if (isNaN(date.getTime())) {
+        // Skip invalid dates
+        return;
+      }
+      const month = date.toISOString().substring(0, 7); // YYYY-MM
       if (!monthlyData[month]) {
         monthlyData[month] = { income: 0, expenses: 0 };
       }
@@ -152,8 +159,8 @@ export const generateInsights = (
 
 const formatCurrency = (amountInCents: number): string => {
   const amount = amountInCents / 100;
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat('id-ID', {
     style: 'currency',
-    currency: 'USD',
+    currency: 'IDR',
   }).format(amount);
 };

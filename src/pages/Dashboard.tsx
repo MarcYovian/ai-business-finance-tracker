@@ -43,6 +43,10 @@ export default function Dashboard() {
   // Prepare monthly data for bar chart
   const monthlyData = transactions.reduce((acc: { month: string; income: number; expenses: number }[], transaction) => {
     const date = new Date(transaction.transactionDate);
+    // Skip transactions with invalid dates
+    if (isNaN(date.getTime())) {
+      return acc;
+    }
     const monthKey = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
     
     // Find existing month or create new entry
@@ -80,7 +84,8 @@ export default function Dashboard() {
   const netProfit = totalIncome - totalExpenses;
 
   // Recent transactions
-  const recentTransactions = [...transactions]
+  const validTransactions = transactions.filter(t => !isNaN(new Date(t.transactionDate).getTime()));
+  const recentTransactions = [...validTransactions]
     .sort((a, b) => new Date(b.transactionDate).getTime() - new Date(a.transactionDate).getTime())
     .slice(0, 5);
 

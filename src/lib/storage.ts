@@ -50,7 +50,13 @@ export const categoryStorage = {
       .select('*')
       .eq('user_id', userId);
     if (error) throw error;
-    return data || [];
+    
+    return data?.map(category => ({
+      id: category.id,
+      name: category.name,
+      userId: category.user_id,
+      createdAt: category.created_at,
+    })) || [];
   },
 
   create: async (name: string, userId: string): Promise<Category> => {
@@ -59,7 +65,14 @@ export const categoryStorage = {
       .insert([{ name, user_id: userId }])
       .select();
     if (error) throw error;
-    return data[0];
+    
+    const result = data[0];
+    return {
+      id: result.id,
+      name: result.name,
+      userId: result.user_id,
+      createdAt: result.created_at,
+    };
   },
 
   update: async (id: string, name: string): Promise<void> => {
@@ -83,7 +96,17 @@ export const categoryStorage = {
       .ilike('name', name)
       .limit(1);
     if (error) throw error;
-    return data?.[0];
+    
+    if (data && data[0]) {
+      const category = data[0];
+      return {
+        id: category.id,
+        name: category.name,
+        userId: category.user_id,
+        createdAt: category.created_at,
+      };
+    }
+    return undefined;
   },
 };
 
@@ -95,7 +118,14 @@ export const fundSourceStorage = {
       .select('*')
       .eq('user_id', userId);
     if (error) throw error;
-    return data || [];
+    
+    return data?.map(fundSource => ({
+      id: fundSource.id,
+      name: fundSource.name,
+      balance: fundSource.balance,
+      userId: fundSource.user_id,
+      createdAt: fundSource.created_at,
+    })) || [];
   },
 
   create: async (name: string, balance: number, userId: string): Promise<FundSource> => {
@@ -104,13 +134,25 @@ export const fundSourceStorage = {
       .insert([{ name, balance, user_id: userId }])
       .select();
     if (error) throw error;
-    return data[0];
+    
+    const result = data[0];
+    return {
+      id: result.id,
+      name: result.name,
+      balance: result.balance,
+      userId: result.user_id,
+      createdAt: result.created_at,
+    };
   },
 
   update: async (id: string, updates: Partial<FundSource>): Promise<void> => {
+    const updatesForDb: { [key: string]: any } = {};
+    if (updates.name) updatesForDb.name = updates.name;
+    if (updates.balance) updatesForDb.balance = updates.balance;
+
     const { error } = await supabase
       .from('fund_sources')
-      .update(updates)
+      .update(updatesForDb)
       .eq('id', id);
     if (error) throw error;
   },
@@ -128,7 +170,18 @@ export const fundSourceStorage = {
       .ilike('name', name)
       .limit(1);
     if (error) throw error;
-    return data?.[0];
+    
+    if (data && data[0]) {
+      const fundSource = data[0];
+      return {
+        id: fundSource.id,
+        name: fundSource.name,
+        balance: fundSource.balance,
+        userId: fundSource.user_id,
+        createdAt: fundSource.created_at,
+      };
+    }
+    return undefined;
   },
 };
 
@@ -140,22 +193,67 @@ export const transactionStorage = {
       .select('*')
       .eq('user_id', userId);
     if (error) throw error;
-    return data || [];
+    
+    return data?.map(transaction => ({
+      id: transaction.id,
+      description: transaction.description,
+      amount: transaction.amount,
+      type: transaction.type,
+      transactionDate: transaction.transaction_date,
+      createdAt: transaction.created_at,
+      userId: transaction.user_id,
+      categoryId: transaction.category_id,
+      sourceFundId: transaction.source_fund_id,
+      destinationFundId: transaction.destination_fund_id,
+    })) || [];
   },
 
   create: async (transaction: Omit<Transaction, 'id' | 'createdAt'>): Promise<Transaction> => {
+    const transactionForDb = {
+      description: transaction.description,
+      amount: transaction.amount,
+      type: transaction.type,
+      transaction_date: transaction.transactionDate,
+      user_id: transaction.userId,
+      category_id: transaction.categoryId,
+      source_fund_id: transaction.sourceFundId,
+      destination_fund_id: transaction.destinationFundId,
+    };
+    
     const { data, error } = await supabase
       .from('transactions')
-      .insert([transaction])
+      .insert([transactionForDb])
       .select();
     if (error) throw error;
-    return data[0];
+    
+    const result = data[0];
+    return {
+      id: result.id,
+      description: result.description,
+      amount: result.amount,
+      type: result.type,
+      transactionDate: result.transaction_date,
+      createdAt: result.created_at,
+      userId: result.user_id,
+      categoryId: result.category_id,
+      sourceFundId: result.source_fund_id,
+      destinationFundId: result.destination_fund_id,
+    };
   },
 
   update: async (id: string, updates: Partial<Transaction>): Promise<void> => {
+    const updatesForDb: { [key: string]: any } = {};
+    if (updates.description) updatesForDb.description = updates.description;
+    if (updates.amount) updatesForDb.amount = updates.amount;
+    if (updates.type) updatesForDb.type = updates.type;
+    if (updates.transactionDate) updatesForDb.transaction_date = updates.transactionDate;
+    if (updates.categoryId) updatesForDb.category_id = updates.categoryId;
+    if (updates.sourceFundId) updatesForDb.source_fund_id = updates.sourceFundId;
+    if (updates.destinationFundId) updatesForDb.destination_fund_id = updates.destinationFundId;
+
     const { error } = await supabase
       .from('transactions')
-      .update(updates)
+      .update(updatesForDb)
       .eq('id', id);
     if (error) throw error;
   },
@@ -180,35 +278,48 @@ export const transactionStorage = {
       throw new Error("Insufficient funds for transfer");
     }
 
-    const transactionsToCreate = [
+    const transactions = [
       {
         description: `Transfer to ${toFundSource.name}`,
         amount: amount,
-        type: 'expense',
-        transaction_date: new Date().toISOString(),
-        user_id: user.id,
-        fund_source_id: fromFundId,
+        type: 'expense' as const,
+        transactionDate: new Date().toISOString(),
+        userId: user.id,
+        sourceFundId: fromFundId,
+        destinationFundId: toFundId,
       },
       {
         description: `Transfer from ${fromFundSource.name}`,
         amount: amount,
-        type: 'income',
-        transaction_date: new Date().toISOString(),
-        user_id: user.id,
-        fund_source_id: toFundId,
+        type: 'income' as const,
+        transactionDate: new Date().toISOString(),
+        userId: user.id,
+        sourceFundId: fromFundId,
+        destinationFundId: toFundId,
       },
     ];
 
     if (fee > 0) {
-      transactionsToCreate.push({
+      transactions.push({
         description: 'Transfer fee',
         amount: fee,
-        type: 'expense',
-        transaction_date: new Date().toISOString(),
-        user_id: user.id,
-        fund_source_id: fromFundId,
+        type: 'expense' as const,
+        transactionDate: new Date().toISOString(),
+        userId: user.id,
+        sourceFundId: fromFundId,
+        destinationFundId: toFundId,
       });
     }
+
+    const transactionsToCreate = transactions.map(t => ({
+      description: t.description,
+      amount: t.amount,
+      type: t.type,
+      transaction_date: t.transactionDate,
+      user_id: t.userId,
+      source_fund_id: t.sourceFundId,
+      destination_fund_id: t.destinationFundId,
+    }));
 
     const { error: transactionError } = await supabase.from('transactions').insert(transactionsToCreate);
     if (transactionError) throw transactionError;
@@ -223,21 +334,17 @@ export const transactionStorage = {
 
 // API Key and AI Provider operations
 export const aiConfigStorage = {
-  // AI Provider
   getProvider: (): 'openai' | 'gemini' => 
     storage.get<any>(STORAGE_KEYS.AI_PROVIDER) || 'openai',
   setProvider: (provider: 'openai' | 'gemini'): void => 
     storage.set(STORAGE_KEYS.AI_PROVIDER, provider),
 
-  // OpenAI Key
   getOpenAIKey: (): string | null => storage.get<string>(STORAGE_KEYS.OPENAI_KEY),
   setOpenAIKey: (key: string): void => storage.set(STORAGE_KEYS.OPENAI_KEY, key),
 
-  // Gemini Key
   getGeminiKey: (): string | null => storage.get<string>(STORAGE_KEYS.GEMINI_KEY),
   setGeminiKey: (key: string): void => storage.set(STORAGE_KEYS.GEMINI_KEY, key),
 
-  // Get key for the active provider
   getActiveKey: (): string | null => {
     const provider = aiConfigStorage.getProvider();
     return provider === 'gemini' 

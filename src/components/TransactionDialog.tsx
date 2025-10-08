@@ -23,7 +23,8 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
   const [type, setType] = useState<TransactionType>('expense');
   const [date, setDate] = useState('');
   const [categoryId, setCategoryId] = useState<string | null>(null);
-  const [fundSourceId, setFundSourceId] = useState<string | null>(null);
+  const [sourceFundId, setSourceFundId] = useState<string | null>(null);
+  const [destinationFundId, setDestinationFundId] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [fundSources, setFundSources] = useState<FundSource[]>([]);
 
@@ -46,14 +47,16 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
       setType(transaction.type);
       setDate(transaction.transactionDate.split('T')[0]);
       setCategoryId(transaction.categoryId || null);
-      setFundSourceId(transaction.fundSourceId || null);
+      setSourceFundId(transaction.sourceFundId || null);
+      setDestinationFundId(transaction.destinationFundId || null);
     } else {
       setDescription('');
       setAmount('');
       setType('expense');
       setDate(new Date().toISOString().split('T')[0]);
       setCategoryId(null);
-      setFundSourceId(null);
+      setSourceFundId(null);
+      setDestinationFundId(null);
     }
   }, [transaction, open, user]);
 
@@ -71,7 +74,8 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
           type,
           transactionDate: new Date(date).toISOString(),
           categoryId: categoryId || undefined,
-          fundSourceId: fundSourceId || undefined,
+          sourceFundId: sourceFundId || undefined,
+          destinationFundId: destinationFundId || undefined,
         });
         toast({ title: 'Transaction updated', description: 'Your transaction has been saved.' });
       } else {
@@ -82,7 +86,8 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
           transactionDate: new Date(date).toISOString(),
           userId: user.id,
           categoryId: categoryId || undefined,
-          fundSourceId: fundSourceId || undefined,
+          sourceFundId: sourceFundId || undefined,
+          destinationFundId: destinationFundId || undefined,
         });
         toast({ title: 'Transaction created', description: 'Your transaction has been added.' });
       }
@@ -131,6 +136,7 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
                 <SelectContent>
                   <SelectItem value="income">Income</SelectItem>
                   <SelectItem value="expense">Expense</SelectItem>
+                  <SelectItem value="transfer">Transfer</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -147,41 +153,90 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="category">Category</Label>
-            <Select 
-              value={categoryId || "__none"} 
-              onValueChange={(value) => setCategoryId(value === "__none" ? null : value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none">None</SelectItem>
-                {categories.map(cat => (
-                  <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {type !== 'transfer' && (
+            <div className="space-y-2">
+              <Label htmlFor="category">Category</Label>
+              <Select 
+                value={categoryId || "__none"} 
+                onValueChange={(value) => setCategoryId(value === "__none" ? null : value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none">None</SelectItem>
+                  {categories.map(cat => (
+                    <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
-          <div className="space-y-2">
-            <Label htmlFor="fundSource">Fund Source</Label>
-            <Select 
-              value={fundSourceId || "__none"} 
-              onValueChange={(value) => setFundSourceId(value === "__none" ? null : value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select fund source" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none">None</SelectItem>
-                {fundSources.map(source => (
-                  <SelectItem key={source.id} value={source.id}>{source.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {type === 'transfer' ? (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="sourceFund">Source Fund</Label>
+                <Select 
+                  value={sourceFundId || "__none"} 
+                  onValueChange={(value) => setSourceFundId(value === "__none" ? null : value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select source" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none">None</SelectItem>
+                    {fundSources.map(source => (
+                      <SelectItem key={source.id} value={source.id}>{source.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="destinationFund">Destination Fund</Label>
+                <Select 
+                  value={destinationFundId || "__none"} 
+                  onValueChange={(value) => setDestinationFundId(value === "__none" ? null : value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select destination" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none">None</SelectItem>
+                    {fundSources.map(source => (
+                      <SelectItem key={source.id} value={source.id}>{source.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="fundSource">
+                {type === 'income' ? 'Destination Fund' : 'Source Fund'}
+              </Label>
+              <Select 
+                value={(type === 'income' ? destinationFundId : sourceFundId) || "__none"} 
+                onValueChange={(value) => {
+                  if (type === 'income') {
+                    setDestinationFundId(value === "__none" ? null : value);
+                  } else {
+                    setSourceFundId(value === "__none" ? null : value);
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={`Select ${type === 'income' ? 'destination' : 'source'} fund`} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none">None</SelectItem>
+                  {fundSources.map(source => (
+                    <SelectItem key={source.id} value={source.id}>{source.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose}>
