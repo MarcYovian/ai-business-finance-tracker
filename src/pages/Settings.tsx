@@ -6,68 +6,78 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { apiKeyStorage, categoryStorage, fundSourceStorage } from '@/lib/storage';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { aiConfigStorage, categoryStorage, fundSourceStorage } from '@/lib/storage';
 import { Category, FundSource } from '@/types/finance';
 import { toast } from '@/hooks/use-toast';
-import { Plus, Trash2, Pencil } from 'lucide-react';
+import { Plus, Trash2, ArrowRightLeft } from 'lucide-react';
 import { formatCurrency } from '@/lib/currency';
+import { TransferDialog } from '@/components/TransferDialog';
 
 export default function Settings() {
   const { user } = useAuth();
-  const [apiKey, setApiKey] = useState('');
+  const [openAIKey, setOpenAIKey] = useState('');
+  const [geminiKey, setGeminiKey] = useState('');
+  const [aiProvider, setAiProvider] = useState('openai');
   const [categories, setCategories] = useState<Category[]>([]);
   const [fundSources, setFundSources] = useState<FundSource[]>([]);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newFundSourceName, setNewFundSourceName] = useState('');
   const [newFundSourceBalance, setNewFundSourceBalance] = useState('');
+  const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
 
   useEffect(() => {
-    const savedKey = apiKeyStorage.get();
-    if (savedKey) {
-      setApiKey(savedKey);
-    }
+    setOpenAIKey(aiConfigStorage.getOpenAIKey() || '');
+    setGeminiKey(aiConfigStorage.getGeminiKey() || '');
+    setAiProvider(aiConfigStorage.getProvider());
     loadData();
-  }, []);
+  }, [user]);
 
-  const loadData = () => {
+  const loadData = async () => {
     if (user) {
-      setCategories(categoryStorage.getAll(user.id));
-      setFundSources(fundSourceStorage.getAll(user.id));
+      const [cats, sources] = await Promise.all([
+        categoryStorage.getAll(user.id),
+        fundSourceStorage.getAll(user.id),
+      ]);
+      setCategories(cats);
+      setFundSources(sources);
     }
   };
 
-  const handleSaveApiKey = () => {
-    apiKeyStorage.set(apiKey);
-    toast({ title: 'API Key saved', description: 'Your OpenAI API key has been stored securely.' });
+  const handleSaveKeys = () => {
+    aiConfigStorage.setProvider(aiProvider as 'openai' | 'gemini');
+    aiConfigStorage.setOpenAIKey(openAIKey);
+    aiConfigStorage.setGeminiKey(geminiKey);
+    toast({ title: 'Settings saved', description: 'Your AI provider and API keys have been updated.' });
   };
 
-  const handleAddCategory = () => {
+  const handleAddCategory = async () => {
     if (!user || !newCategoryName.trim()) return;
-    categoryStorage.create(newCategoryName.trim(), user.id);
+    await categoryStorage.create(newCategoryName.trim(), user.id);
     setNewCategoryName('');
-    loadData();
+    await loadData();
     toast({ title: 'Category added' });
   };
 
-  const handleDeleteCategory = (id: string) => {
-    categoryStorage.delete(id);
-    loadData();
+  const handleDeleteCategory = async (id: string) => {
+    await categoryStorage.delete(id);
+    await loadData();
     toast({ title: 'Category deleted' });
   };
 
-  const handleAddFundSource = () => {
+  const handleAddFundSource = async () => {
     if (!user || !newFundSourceName.trim()) return;
     const balanceInCents = Math.round(parseFloat(newFundSourceBalance || '0') * 100);
-    fundSourceStorage.create(newFundSourceName.trim(), balanceInCents, user.id);
+    await fundSourceStorage.create(newFundSourceName.trim(), balanceInCents, user.id);
     setNewFundSourceName('');
     setNewFundSourceBalance('');
-    loadData();
+    await loadData();
     toast({ title: 'Fund source added' });
   };
 
-  const handleDeleteFundSource = (id: string) => {
-    fundSourceStorage.delete(id);
-    loadData();
+  const handleDeleteFundSource = async (id: string) => {
+    await fundSourceStorage.delete(id);
+    await loadData();
     toast({ title: 'Fund source deleted' });
   };
 
@@ -79,36 +89,58 @@ export default function Settings() {
           <p className="text-muted-foreground">Configure your AI Finance Tracker</p>
         </div>
 
-        <Tabs defaultValue="api" className="w-full">
+        <Tabs defaultValue="ai" className="w-full">
           <TabsList>
-            <TabsTrigger value="api">API Key</TabsTrigger>
+            <TabsTrigger value="ai">AI Settings</TabsTrigger>
             <TabsTrigger value="categories">Categories</TabsTrigger>
             <TabsTrigger value="funds">Fund Sources</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="api">
+          <TabsContent value="ai">
             <Card>
               <CardHeader>
-                <CardTitle>OpenAI API Key</CardTitle>
-                <CardDescription>
-                  Your API key is stored locally and never sent to our servers. Get your key from{' '}
-                  <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-accent underline">
-                    OpenAI Platform
-                  </a>
-                </CardDescription>
+                <CardTitle>AI Provider & API Keys</CardTitle>
+                <CardDescription>Choose your AI provider and enter the corresponding API key.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-6">
                 <div className="space-y-2">
-                  <Label htmlFor="api-key">API Key</Label>
-                  <Input
-                    id="api-key"
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="sk-..."
-                  />
+                  <Label>AI Provider</Label>
+                  <Select value={aiProvider} onValueChange={setAiProvider}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="openai">OpenAI</SelectItem>
+                      <SelectItem value="gemini">Google Gemini</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <Button onClick={handleSaveApiKey}>Save API Key</Button>
+
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="openai-key">OpenAI API Key</Label>
+                    <Input
+                      id="openai-key"
+                      type="password"
+                      value={openAIKey}
+                      onChange={(e) => setOpenAIKey(e.target.value)}
+                      placeholder="sk-..."
+                      disabled={aiProvider !== 'openai'}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="gemini-key">Gemini API Key</Label>
+                    <Input
+                      id="gemini-key"
+                      type="password"
+                      value={geminiKey}
+                      onChange={(e) => setGeminiKey(e.target.value)}
+                      placeholder="AIza..."
+                      disabled={aiProvider !== 'gemini'}
+                    />
+                  </div>
+                </div>
+                <Button onClick={handleSaveKeys}>Save Settings</Button>
               </CardContent>
             </Card>
           </TabsContent>
@@ -157,9 +189,15 @@ export default function Settings() {
 
           <TabsContent value="funds">
             <Card>
-              <CardHeader>
-                <CardTitle>Fund Sources</CardTitle>
-                <CardDescription>Track different accounts and payment methods</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Fund Sources</CardTitle>
+                  <CardDescription>Track different accounts and payment methods</CardDescription>
+                </div>
+                <Button variant="outline" onClick={() => setIsTransferDialogOpen(true)}>
+                  <ArrowRightLeft className="h-4 w-4 mr-2" />
+                  Transfer Funds
+                </Button>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex gap-2">
@@ -207,6 +245,15 @@ export default function Settings() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <TransferDialog
+        open={isTransferDialogOpen}
+        onClose={() => {
+          setIsTransferDialogOpen(false);
+          loadData(); // Reload data after transfer
+        }}
+        fundSources={fundSources}
+      />
     </Layout>
   );
 }

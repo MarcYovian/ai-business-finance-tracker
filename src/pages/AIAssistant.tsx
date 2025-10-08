@@ -4,11 +4,12 @@ import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
-import { apiKeyStorage, transactionStorage, categoryStorage, fundSourceStorage } from '@/lib/storage';
+import { aiConfigStorage, transactionStorage, categoryStorage, fundSourceStorage } from '@/lib/storage';
 import { AIResponse } from '@/types/finance';
 import { Send, Bot, User } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-import { parseCurrency, extractCurrencyFromText } from '@/lib/currency';
+import { extractCurrencyFromText } from '@/lib/currency';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -32,12 +33,50 @@ export default function AIAssistant() {
     scrollToBottom();
   }, [messages]);
 
+  const processWithGemini = async (apiKey: string, prompt: string): Promise<string> => {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash"});
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    let text = response.text();
+    // Clean the response to get only the JSON part
+    text = text.replace(/```json\n/g, '').replace(/\n```/g, '');
+    return text;
+  };
+
+  const processWithOpenAI = async (apiKey: string, systemPrompt: string, userInput: string): Promise<string> => {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userInput }
+        ],
+        temperature: 0.3,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('OpenAI API request failed');
+    }
+
+    const data = await response.json();
+    return data.choices[0].message.content;
+  };
+
   const processAIResponse = async (userInput: string) => {
-    const apiKey = apiKeyStorage.get();
+    const provider = aiConfigStorage.getProvider();
+    const apiKey = aiConfigStorage.getActiveKey();
+
     if (!apiKey) {
       toast({
         title: 'API Key Required',
-        description: 'Please set your OpenAI API key in Settings.',
+        description: `Please set your ${provider === 'gemini' ? 'Gemini' : 'OpenAI'} API key in Settings.`,
         variant: 'destructive'
       });
       return;
@@ -46,53 +85,20 @@ export default function AIAssistant() {
     if (!user) return;
 
     try {
-      const categories = categoryStorage.getAll(user.id);
-      const fundSources = fundSourceStorage.getAll(user.id);
+      const [categories, fundSources] = await Promise.all([
+        categoryStorage.getAll(user.id),
+        fundSourceStorage.getAll(user.id),
+      ]);
 
-      const systemPrompt = `You are an expert financial assistant. Extract transaction details from user input and return ONLY a JSON object.
+      const systemPrompt = `You are an expert financial assistant. Extract transaction details from user input and return ONLY a JSON object.\n\nCurrent date: ${new Date().toISOString().split('T')[0]}\nUser's categories: ${categories.map(c => c.name).join(', ') || 'none'}\nUser's fund sources: ${fundSources.map(f => f.name).join(', ') || 'none'}\n\nExtract these fields:\n- "type": "income" or "expense"\n- "amount": numeric value (just the number)\n- "description": brief summary\n- "date": YYYY-MM-DD format (today if not specified)\n- "category": from user's list or suggest new one\n- "fundSource": from user's list if mentioned\n\nIf unclear, respond with: {\"clarification_needed\": \"Your question\"}\n\nUser input: ${userInput}\n\nRespond ONLY with valid JSON:`;
 
-Current date: ${new Date().toISOString().split('T')[0]}
-User's categories: ${categories.map(c => c.name).join(', ') || 'none'}
-User's fund sources: ${fundSources.map(f => f.name).join(', ') || 'none'}
-
-Extract these fields:
-- "type": "income" or "expense"
-- "amount": numeric value (just the number)
-- "description": brief summary
-- "date": YYYY-MM-DD format (today if not specified)
-- "category": from user's list or suggest new one
-- "fundSource": from user's list if mentioned
-
-If unclear, respond with: {"clarification_needed": "Your question"}
-
-User input: ${userInput}
-
-Respond ONLY with valid JSON:`;
-
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userInput }
-          ],
-          temperature: 0.3,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('OpenAI API request failed');
+      let aiContent: string;
+      if (provider === 'gemini') {
+        aiContent = await processWithGemini(apiKey, systemPrompt);
+      } else {
+        aiContent = await processWithOpenAI(apiKey, systemPrompt, userInput);
       }
-
-      const data = await response.json();
-      const aiContent = data.choices[0].message.content;
       
-      // Parse the AI response
       const aiResponse: AIResponse = JSON.parse(aiContent);
 
       if (aiResponse.clarification_needed) {
@@ -100,45 +106,33 @@ Respond ONLY with valid JSON:`;
         return;
       }
 
-      // Create transaction
       if (aiResponse.type && aiResponse.description) {
         let categoryId: string | undefined;
-        let fundSourceId: string | undefined;
-
-        // Find or create category
         if (aiResponse.category) {
-          let category = categoryStorage.findByName(aiResponse.category, user.id);
+          let category = await categoryStorage.findByName(aiResponse.category, user.id);
           if (!category) {
-            category = categoryStorage.create(aiResponse.category, user.id);
+            category = await categoryStorage.create(aiResponse.category, user.id);
           }
           categoryId = category.id;
         }
 
-        // Find fund source
+        let fundSourceId: string | undefined;
         if (aiResponse.fundSource) {
-          const fundSource = fundSourceStorage.findByName(aiResponse.fundSource, user.id);
+          const fundSource = await fundSourceStorage.findByName(aiResponse.fundSource, user.id);
           fundSourceId = fundSource?.id;
         }
 
-        // Calculate amount - prioritize AI response, fallback to text extraction
-        let amountInCents: number;
-        if (aiResponse.amount !== undefined) {
-          amountInCents = Math.round(aiResponse.amount * 100);
-        } else {
-          // If AI didn't provide amount, try to extract from user input
-          amountInCents = extractCurrencyFromText(userInput);
-        }
+        let amountInCents = aiResponse.amount ? Math.round(aiResponse.amount * 100) : extractCurrencyFromText(userInput);
 
-        // If amount is still zero, show an error
         if (amountInCents === 0) {
           setMessages(prev => [...prev, { 
             role: 'assistant', 
-            content: 'Sorry, I couldn\'t identify the amount in your transaction. Please include a specific amount (e.g., "$50", "Rp 150,000", etc.).' 
+            content: 'Sorry, I couldn\'t identify the amount. Please include a specific amount (e.g., "$50").' 
           }]);
           return;
         }
         
-        transactionStorage.create({
+        await transactionStorage.create({
           description: aiResponse.description,
           amount: amountInCents,
           type: aiResponse.type,
@@ -149,33 +143,23 @@ Respond ONLY with valid JSON:`;
         });
 
         const amountDisplay = (amountInCents / 100).toFixed(2);
-        const confirmationMessage = `Got it! I've logged a ${amountDisplay} ${aiResponse.type} for "${aiResponse.description}"${categoryId ? ` under the "${aiResponse.category}" category` : ''}. Is that correct?`;
+        const confirmationMessage = `Got it! I've logged a ${amountDisplay} ${aiResponse.type} for "${aiResponse.description}".`;
         setMessages(prev => [...prev, { role: 'assistant', content: confirmationMessage }]);
-        
-        toast({ title: 'Transaction added', description: 'Your transaction has been saved.' });
+        toast({ title: 'Transaction added' });
       }
     } catch (error) {
       console.error('AI processing error:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to process your request. Please try again.',
-        variant: 'destructive'
-      });
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: 'Sorry, I encountered an error processing that. Please try rephrasing your transaction.' 
-      }]);
+      toast({ title: 'Error', description: 'Failed to process your request.', variant: 'destructive' });
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, I encountered an error. Please try rephrasing.' }]);
     }
   };
 
   const handleSend = async () => {
     if (!input.trim()) return;
-
     const userMessage = input.trim();
     setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
     setInput('');
     setIsLoading(true);
-
     await processAIResponse(userMessage);
     setIsLoading(false);
   };

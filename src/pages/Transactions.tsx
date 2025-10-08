@@ -4,7 +4,7 @@ import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { transactionStorage, categoryStorage, fundSourceStorage } from '@/lib/storage';
-import { Transaction } from '@/types/finance';
+import { Transaction, Category, FundSource } from '@/types/finance';
 import { formatCurrency, formatDate } from '@/lib/currency';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { TransactionDialog } from '@/components/TransactionDialog';
@@ -13,27 +13,39 @@ import { toast } from '@/hooks/use-toast';
 export default function Transactions() {
   const { user } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [fundSources, setFundSources] = useState<FundSource[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
-  const loadTransactions = () => {
+  const loadData = async () => {
     if (user) {
-      const allTransactions = transactionStorage.getAll(user.id);
-      setTransactions(allTransactions.sort((a, b) => 
+      const [trans, cats, sources] = await Promise.all([
+        transactionStorage.getAll(user.id),
+        categoryStorage.getAll(user.id),
+        fundSourceStorage.getAll(user.id),
+      ]);
+      setTransactions(trans.sort((a, b) => 
         new Date(b.transactionDate).getTime() - new Date(a.transactionDate).getTime()
       ));
+      setCategories(cats);
+      setFundSources(sources);
     }
   };
 
   useEffect(() => {
-    loadTransactions();
+    loadData();
   }, [user]);
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this transaction?')) {
-      transactionStorage.delete(id);
-      loadTransactions();
-      toast({ title: 'Transaction deleted', description: 'The transaction has been removed.' });
+      try {
+        await transactionStorage.delete(id);
+        await loadData();
+        toast({ title: 'Transaction deleted', description: 'The transaction has been removed.' });
+      } catch (error) {
+        toast({ title: 'Error', description: 'Could not delete transaction.', variant: 'destructive' });
+      }
     }
   };
 
@@ -45,20 +57,18 @@ export default function Transactions() {
   const handleDialogClose = () => {
     setIsDialogOpen(false);
     setEditingTransaction(null);
-    loadTransactions();
+    loadData(); // Reload data after a transaction is created or updated
   };
 
   const getCategoryName = (categoryId?: string) => {
-    if (!categoryId || !user) return 'Uncategorized';
-    const categories = categoryStorage.getAll(user.id);
+    if (!categoryId) return 'Uncategorized';
     const category = categories.find(c => c.id === categoryId);
     return category?.name || 'Uncategorized';
   };
 
   const getFundSourceName = (fundSourceId?: string) => {
-    if (!fundSourceId || !user) return 'N/A';
-    const sources = fundSourceStorage.getAll(user.id);
-    const source = sources.find(s => s.id === fundSourceId);
+    if (!fundSourceId) return 'N/A';
+    const source = fundSources.find(s => s.id === fundSourceId);
     return source?.name || 'N/A';
   };
 

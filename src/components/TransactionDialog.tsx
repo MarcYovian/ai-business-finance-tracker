@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { transactionStorage, categoryStorage, fundSourceStorage } from '@/lib/storage';
-import { Transaction, TransactionType } from '@/types/finance';
+import { Transaction, TransactionType, Category, FundSource } from '@/types/finance';
 import { parseCurrency } from '@/lib/currency';
 import { toast } from '@/hooks/use-toast';
 
@@ -24,11 +24,22 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
   const [date, setDate] = useState('');
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [fundSourceId, setFundSourceId] = useState<string | null>(null);
-
-  const categories = user ? categoryStorage.getAll(user.id) : [];
-  const fundSources = user ? fundSourceStorage.getAll(user.id) : [];
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [fundSources, setFundSources] = useState<FundSource[]>([]);
 
   useEffect(() => {
+    if (user && open) {
+      const fetchData = async () => {
+        const [cats, sources] = await Promise.all([
+          categoryStorage.getAll(user.id),
+          fundSourceStorage.getAll(user.id),
+        ]);
+        setCategories(cats);
+        setFundSources(sources);
+      };
+      fetchData();
+    }
+
     if (transaction) {
       setDescription(transaction.description);
       setAmount((transaction.amount / 100).toString());
@@ -44,38 +55,41 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
       setCategoryId(null);
       setFundSourceId(null);
     }
-  }, [transaction, open]);
+  }, [transaction, open, user]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
     const amountInCents = parseCurrency(amount);
     
-    if (transaction) {
-      transactionStorage.update(transaction.id, {
-        description,
-        amount: amountInCents,
-        type,
-        transactionDate: new Date(date).toISOString(),
-        categoryId: categoryId || undefined,
-        fundSourceId: fundSourceId || undefined,
-      });
-      toast({ title: 'Transaction updated', description: 'Your transaction has been saved.' });
-    } else {
-      transactionStorage.create({
-        description,
-        amount: amountInCents,
-        type,
-        transactionDate: new Date(date).toISOString(),
-        userId: user.id,
-        categoryId: categoryId || undefined,
-        fundSourceId: fundSourceId || undefined,
-      });
-      toast({ title: 'Transaction created', description: 'Your transaction has been added.' });
+    try {
+      if (transaction) {
+        await transactionStorage.update(transaction.id, {
+          description,
+          amount: amountInCents,
+          type,
+          transactionDate: new Date(date).toISOString(),
+          categoryId: categoryId || undefined,
+          fundSourceId: fundSourceId || undefined,
+        });
+        toast({ title: 'Transaction updated', description: 'Your transaction has been saved.' });
+      } else {
+        await transactionStorage.create({
+          description,
+          amount: amountInCents,
+          type,
+          transactionDate: new Date(date).toISOString(),
+          userId: user.id,
+          categoryId: categoryId || undefined,
+          fundSourceId: fundSourceId || undefined,
+        });
+        toast({ title: 'Transaction created', description: 'Your transaction has been added.' });
+      }
+      onClose();
+    } catch (error) {
+      toast({ title: 'Error', description: 'Something went wrong.', variant: 'destructive' });
     }
-
-    onClose();
   };
 
   return (

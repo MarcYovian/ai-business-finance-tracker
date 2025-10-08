@@ -18,21 +18,25 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (user) {
-      const allTransactions = transactionStorage.getAll(user.id);
-      const allCategories = categoryStorage.getAll(user.id);
-      setTransactions(allTransactions);
-      setCategories(allCategories);
-      
-      const income = allTransactions
-        .filter(t => t.type === 'income')
-        .reduce((sum, t) => sum + t.amount, 0);
-      
-      const expenses = allTransactions
-        .filter(t => t.type === 'expense')
-        .reduce((sum, t) => sum + t.amount, 0);
-      
-      setTotalIncome(income);
-      setTotalExpenses(expenses);
+      const fetchData = async () => {
+        const allTransactions = await transactionStorage.getAll(user.id);
+        const allCategories = await categoryStorage.getAll(user.id);
+        setTransactions(allTransactions);
+        setCategories(allCategories);
+
+        const income = allTransactions
+          .filter(t => t.type === 'income')
+          .reduce((sum, t) => sum + t.amount, 0);
+
+        const expenses = allTransactions
+          .filter(t => t.type === 'expense')
+          .reduce((sum, t) => sum + t.amount, 0);
+
+        setTotalIncome(income);
+        setTotalExpenses(expenses);
+      };
+
+      fetchData();
     }
   }, [user]);
 

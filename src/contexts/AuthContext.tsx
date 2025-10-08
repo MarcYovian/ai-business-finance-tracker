@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+import { AuthChangeEvent, Session, User as SupabaseUser } from '@supabase/supabase-js';
 import { User } from '@/types/finance';
-import { userStorage } from '@/lib/storage';
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => boolean;
-  signup: (email: string, password: string) => boolean;
-  logout: () => void;
+  login: (email: string, password: string) => Promise<any>;
+  signup: (email: string, password: string) => Promise<any>;
+  logout: () => Promise<void>;
   isLoading: boolean;
 }
 
@@ -17,40 +18,61 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const currentUser = userStorage.getCurrentUser();
-    setUser(currentUser);
-    setIsLoading(false);
+    const getInitialUser = async () => {
+      const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+      if (supabaseUser) {
+        setUser({
+          id: supabaseUser.id,
+          email: supabaseUser.email || '',
+          createdAt: supabaseUser.created_at,
+        });
+      }
+      setIsLoading(false);
+    };
+
+    getInitialUser();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      async (event: AuthChangeEvent, session: Session | null) => {
+        const supabaseUser = session?.user ?? null;
+        if (supabaseUser) {
+          setUser({
+            id: supabaseUser.id,
+            email: supabaseUser.email || '',
+            createdAt: supabaseUser.created_at,
+          });
+        } else {
+          setUser(null);
+        }
+        setIsLoading(false);
+      }
+    );
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
-  const signup = (email: string, _password: string): boolean => {
-    const existingUser = userStorage.findByEmail(email);
-    if (existingUser) {
-      return false;
-    }
-    const newUser = userStorage.create(email);
-    setUser(newUser);
-    userStorage.setCurrentUser(newUser);
-    return true;
+  const signup = async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) throw error;
+    return data;
   };
 
-  const login = (email: string, _password: string): boolean => {
-    const existingUser = userStorage.findByEmail(email);
-    if (!existingUser) {
-      return false;
-    }
-    setUser(existingUser);
-    userStorage.setCurrentUser(existingUser);
-    return true;
+  const login = async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    return data;
   };
 
-  const logout = () => {
-    setUser(null);
-    userStorage.setCurrentUser(null);
+  const logout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
   };
 
   return (
     <AuthContext.Provider value={{ user, login, signup, logout, isLoading }}>
-      {children}
+      {!isLoading && children}
     </AuthContext.Provider>
   );
 };
