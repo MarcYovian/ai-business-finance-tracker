@@ -22,8 +22,8 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
   const [amount, setAmount] = useState('');
   const [type, setType] = useState<TransactionType>('expense');
   const [date, setDate] = useState('');
-  const [categoryId, setCategoryId] = useState('');
-  const [fundSourceId, setFundSourceId] = useState('');
+  const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [fundSourceId, setFundSourceId] = useState<string | null>(null);
 
   const categories = user ? categoryStorage.getAll(user.id) : [];
   const fundSources = user ? fundSourceStorage.getAll(user.id) : [];
@@ -34,15 +34,15 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
       setAmount((transaction.amount / 100).toString());
       setType(transaction.type);
       setDate(transaction.transactionDate.split('T')[0]);
-      setCategoryId(transaction.categoryId || '');
-      setFundSourceId(transaction.fundSourceId || '');
+      setCategoryId(transaction.categoryId || null);
+      setFundSourceId(transaction.fundSourceId || null);
     } else {
       setDescription('');
       setAmount('');
       setType('expense');
       setDate(new Date().toISOString().split('T')[0]);
-      setCategoryId('');
-      setFundSourceId('');
+      setCategoryId(null);
+      setFundSourceId(null);
     }
   }, [transaction, open]);
 
@@ -135,12 +135,15 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
 
           <div className="space-y-2">
             <Label htmlFor="category">Category</Label>
-            <Select value={categoryId} onValueChange={setCategoryId}>
+            <Select 
+              value={categoryId || "__none"} 
+              onValueChange={(value) => setCategoryId(value === "__none" ? null : value)}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Select category" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">None</SelectItem>
+                <SelectItem value="__none">None</SelectItem>
                 {categories.map(cat => (
                   <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
                 ))}
@@ -150,12 +153,15 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
 
           <div className="space-y-2">
             <Label htmlFor="fundSource">Fund Source</Label>
-            <Select value={fundSourceId} onValueChange={setFundSourceId}>
+            <Select 
+              value={fundSourceId || "__none"} 
+              onValueChange={(value) => setFundSourceId(value === "__none" ? null : value)}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Select fund source" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">None</SelectItem>
+                <SelectItem value="__none">None</SelectItem>
                 {fundSources.map(source => (
                   <SelectItem key={source.id} value={source.id}>{source.name}</SelectItem>
                 ))}
