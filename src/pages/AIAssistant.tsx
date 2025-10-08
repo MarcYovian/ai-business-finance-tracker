@@ -103,6 +103,72 @@ export default function AIAssistant() {
     if (!user) return;
 
     try {
+      // --- FIRST AI CALL: INTENT CLASSIFICATION ---
+      const classifierPrompt = `You are an intent classification expert. Your job is to analyze the user's input and determine their primary intent. Respond ONLY with a valid JSON object.
+
+The possible intents are:
+- "log_transaction": The user is describing a financial transaction (income, expense, or transfer) that needs to be recorded.
+- "query_data": The user is asking a question about their financial data.
+- "general_help": The user is asking about your capabilities, greeting you, or having a general conversation.
+
+JSON Output Schema:
+- If intent is "log_transaction" or "general_help", return: {"intent": "intent_name"}
+- If intent is "query_data", also extract the core question: {"intent": "query_data", "query": "summarized user question in English"}
+
+Examples:
+1. User Input: "kemarin beli bensin 50 ribu"
+   Your JSON Response: {"intent": "log_transaction"}
+2. User Input: "berapa total pengeluaran bulan ini?"
+   Your JSON Response: {"intent": "query_data", "query": "total expenses this month"}
+3. User Input: "apa saja yang bisa kamu lakukan?"
+   Your JSON Response: {"intent": "general_help"}
+
+User Input: "${userInput}"
+Your JSON Response:`;
+
+      let classificationContent: string;
+      if (provider === "gemini") {
+        classificationContent = await processWithGemini(apiKey, classifierPrompt);
+      } else {
+        classificationContent = await processWithOpenAI(apiKey, classifierPrompt, userInput);
+      }
+      const classification = JSON.parse(classificationContent);
+
+      // --- ROUTE TO THE CORRECT HANDLER BASED ON INTENT ---
+      switch (classification.intent) {
+        case 'log_transaction':
+          await handleLogTransaction(userInput, provider, apiKey);
+          break;
+        case 'query_data':
+          await handleQueryData(userInput, classification.query, provider, apiKey);
+          break;
+        case 'general_help':
+          handleGeneralHelp();
+          break;
+        default:
+          setMessages(prev => [...prev, { role: 'assistant', content: "Sorry, I don't understand that request." }]);
+      }
+    } catch (error) {
+      console.error("AI processing error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to process your request.",
+        variant: "destructive",
+      });
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "Sorry, I encountered an error. Please try rephrasing.",
+        },
+      ]);
+    }
+  };
+
+  const handleLogTransaction = async (userInput: string, provider: string, apiKey: string) => {
+    if (!user) return;
+
+    try {
       const [categories, fundSources] = await Promise.all([
         categoryStorage.getAll(user.id),
         fundSourceStorage.getAll(user.id),
@@ -282,6 +348,7 @@ Respond ONLY with valid JSON:
           return;
         }
 
+        // Create the transaction
         await transactionStorage.create({
           description: transaction.description,
           amount: amountInCents,
@@ -294,6 +361,27 @@ Respond ONLY with valid JSON:
           sourceFundId,
           destinationFundId,
         });
+
+        // Update fund source balances based on transaction type
+        if (transaction.type === 'income' && destinationFundId) {
+          // For income, increase the destination fund's balance
+          const fundSource = await fundSourceStorage.getAll(user.id).then(funds => funds.find(f => f.id === destinationFundId));
+          if (fundSource) {
+            await fundSourceStorage.update(destinationFundId, {
+              balance: fundSource.balance + amountInCents
+            });
+          }
+        } else if (transaction.type === 'expense' && sourceFundId) {
+          // For expense, decrease the source fund's balance
+          const fundSource = await fundSourceStorage.getAll(user.id).then(funds => funds.find(f => f.id === sourceFundId));
+          if (fundSource) {
+            await fundSourceStorage.update(sourceFundId, {
+              balance: fundSource.balance - amountInCents
+            });
+          }
+        }
+        // For transfers, the balance update is already handled in transactionStorage.createTransfer
+        // so we don't need to handle it here
 
         const amountDisplay = (amountInCents / 100).toFixed(2);
         
@@ -330,6 +418,142 @@ Respond ONLY with valid JSON:
           role: "assistant",
           content: "Sorry, I encountered an error. Please try rephrasing.",
         },
+      ]);
+    }
+  };
+
+  const handleGeneralHelp = () => {
+    const helpMessage = "Of course! I can help you log transactions (income, expenses, transfers) using everyday language. You can also ask me questions about your financial data, like 'What were my total earnings last month?' or 'What's my biggest spending category?'.";
+    setMessages(prev => [...prev, { role: 'assistant', content: helpMessage }]);
+  };
+
+  const handleQueryData = async (originalQuery: string, normalizedQuery: string, provider: string, apiKey: string) => {
+    if (!user) return;
+
+    try {
+      // 1. Your code fetches and processes the data
+      const [transactions, categories, fundSources] = await Promise.all([
+        transactionStorage.getAll(user.id),
+        categoryStorage.getAll(user.id),
+        fundSourceStorage.getAll(user.id),
+      ]);
+      
+      let dataSummary = {};
+      const now = new Date();
+      const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const startOfThisYear = new Date(now.getFullYear(), 0, 1);
+      const startOfLastYear = new Date(now.getFullYear() - 1, 0, 1);
+
+      // Check for different query types
+      if (normalizedQuery.toLowerCase().includes("expenses this month") || 
+          normalizedQuery.toLowerCase().includes("pengeluaran bulan ini") ||
+          normalizedQuery.toLowerCase().includes("total pengeluaran")) {
+        const expensesThisMonth = transactions
+          .filter(t => t.type === 'expense' && new Date(t.transactionDate) >= thisMonth)
+          .reduce((sum, t) => sum + t.amount, 0);
+
+        dataSummary = {
+          query: "total expenses this month",
+          totalExpensesInCents: expensesThisMonth,
+          month: now.toLocaleString('id-ID', { month: 'long', year: 'numeric' })
+        };
+      } else if (normalizedQuery.toLowerCase().includes("income this month") || 
+                 normalizedQuery.toLowerCase().includes("pemasukan bulan ini") ||
+                 normalizedQuery.toLowerCase().includes("total pemasukan")) {
+        const incomeThisMonth = transactions
+          .filter(t => t.type === 'income' && new Date(t.transactionDate) >= thisMonth)
+          .reduce((sum, t) => sum + t.amount, 0);
+
+        dataSummary = {
+          query: "total income this month",
+          totalIncomeInCents: incomeThisMonth,
+          month: now.toLocaleString('id-ID', { month: 'long', year: 'numeric' })
+        };
+      } else if (normalizedQuery.toLowerCase().includes("net profit this month") || 
+                 normalizedQuery.toLowerCase().includes("net profit bulan ini")) {
+        const incomeThisMonth = transactions
+          .filter(t => t.type === 'income' && new Date(t.transactionDate) >= thisMonth)
+          .reduce((sum, t) => sum + t.amount, 0);
+        const expensesThisMonth = transactions
+          .filter(t => t.type === 'expense' && new Date(t.transactionDate) >= thisMonth)
+          .reduce((sum, t) => sum + t.amount, 0);
+
+        dataSummary = {
+          query: "net profit this month",
+          totalIncomeInCents: incomeThisMonth,
+          totalExpensesInCents: expensesThisMonth,
+          netProfitInCents: incomeThisMonth - expensesThisMonth,
+          month: now.toLocaleString('id-ID', { month: 'long', year: 'numeric' })
+        };
+      } else if (normalizedQuery.toLowerCase().includes("top category") || 
+                 normalizedQuery.toLowerCase().includes("biggest spending") ||
+                 normalizedQuery.toLowerCase().includes("kategori terbesar")) {
+        const expenseByCategory = categories.map(cat => {
+          const total = transactions
+            .filter(t => t.type === 'expense' && t.categoryId === cat.id)
+            .reduce((sum, t) => sum + t.amount, 0);
+          return { name: cat.name, total };
+        }).filter(item => item.total > 0);
+
+        if (expenseByCategory.length > 0) {
+          const topCategory = expenseByCategory.reduce((prev, current) => 
+            (prev.total > current.total) ? prev : current
+          );
+
+          dataSummary = {
+            query: "top expense category",
+            topCategory: topCategory.name,
+            totalSpentInCents: topCategory.total
+          };
+        } else {
+          dataSummary = {
+            query: "top expense category",
+            topCategory: "No expenses recorded",
+            totalSpentInCents: 0
+          };
+        }
+      } else {
+        // Default fallback for unrecognized queries
+        dataSummary = {
+          query: originalQuery,
+          message: "I'm working on understanding more types of financial questions. Could you ask about your expenses, income, or top spending categories?"
+        };
+      }
+
+      // 2. Create the "Answerer Prompt" with the data summary
+      const answererPrompt = `You are a helpful financial assistant. Your task is to answer the user's question based on the data summary provided. 
+Answer in a friendly and natural tone in Indonesian. Format the currency from cents to a readable format (e.g., 1500000 cents becomes Rp 15.000).
+
+Data Summary:
+${JSON.stringify(dataSummary)}
+
+User's Original Question: "${originalQuery}"
+
+Your Answer:`;
+
+      // 3. Make the second AI call to get the final answer
+      let finalAnswer: string;
+      if (provider === "gemini") {
+        finalAnswer = await processWithGemini(apiKey, answererPrompt);
+      } else {
+        finalAnswer = await processWithOpenAI(apiKey, answererPrompt, originalQuery);
+      }
+
+      setMessages(prev => [...prev, { role: 'assistant', content: finalAnswer }]);
+    } catch (error) {
+      console.error("Error processing data query:", error);
+      toast({
+        title: "Error",
+        description: "Failed to process your data query.",
+        variant: "destructive",
+      });
+      setMessages(prev => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "Sorry, I encountered an error while processing your data query. Please try rephrasing your question."
+        }
       ]);
     }
   };
