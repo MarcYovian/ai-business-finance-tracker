@@ -3,21 +3,25 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Layout } from '@/components/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { transactionStorage, categoryStorage } from '@/lib/storage';
-import { Transaction } from '@/types/finance';
+import { Transaction, Category } from '@/types/finance';
 import { formatCurrency, formatDate } from '@/lib/currency';
-import { TrendingUp, TrendingDown, DollarSign, Receipt } from 'lucide-react';
+import { generateInsights } from '@/lib/insights';
+import { TrendingUp, TrendingDown, DollarSign, Receipt, Lightbulb } from 'lucide-react';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 export default function Dashboard() {
   const { user } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [totalIncome, setTotalIncome] = useState(0);
   const [totalExpenses, setTotalExpenses] = useState(0);
 
   useEffect(() => {
     if (user) {
       const allTransactions = transactionStorage.getAll(user.id);
+      const allCategories = categoryStorage.getAll(user.id);
       setTransactions(allTransactions);
+      setCategories(allCategories);
       
       const income = allTransactions
         .filter(t => t.type === 'income')
@@ -32,10 +36,31 @@ export default function Dashboard() {
     }
   }, [user]);
 
-  const netProfit = totalIncome - totalExpenses;
+  // Prepare monthly data for bar chart
+  const monthlyData = transactions.reduce((acc: { month: string; income: number; expenses: number }[], transaction) => {
+    const date = new Date(transaction.transactionDate);
+    const monthKey = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+    
+    // Find existing month or create new entry
+    let monthData = acc.find(item => item.month === monthKey);
+    if (!monthData) {
+      monthData = { month: monthKey, income: 0, expenses: 0 };
+      acc.push(monthData);
+    }
+    
+    if (transaction.type === 'income') {
+      monthData.income += transaction.amount / 100; // Convert from cents to dollars for display
+    } else {
+      monthData.expenses += transaction.amount / 100; // Convert from cents to dollars for display
+    }
+    
+    return acc;
+  }, []);
+
+  // Sort monthly data by date (oldest to newest)
+  monthlyData.sort((a, b) => a.month.localeCompare(b.month));
 
   // Prepare data for expense breakdown pie chart
-  const categories = user ? categoryStorage.getAll(user.id) : [];
   const expenseByCategory = categories.map(cat => {
     const total = transactions
       .filter(t => t.type === 'expense' && t.categoryId === cat.id)
@@ -44,6 +69,11 @@ export default function Dashboard() {
   }).filter(item => item.value > 0);
 
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
+
+  // Generate insights
+  const insights = user ? generateInsights(transactions, categories) : [];
+
+  const netProfit = totalIncome - totalExpenses;
 
   // Recent transactions
   const recentTransactions = [...transactions]
@@ -93,6 +123,69 @@ export default function Dashboard() {
           </Card>
         </div>
 
+        {/* Monthly Income vs Expenses Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Income vs Expenses Over Time</CardTitle>
+            <CardDescription>Monthly breakdown of your financial activity</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {monthlyData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={monthlyData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis tickFormatter={(value) => `$${value}`} />
+                  <Tooltip formatter={(value) => [`$${value}`, 'Amount']} />
+                  <Legend />
+                  <Bar dataKey="income" name="Income" fill="#10b981" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="expenses" name="Expenses" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-[300px] items-center justify-center text-muted-foreground">
+                No monthly data available yet
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Insights */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Lightbulb className="h-5 w-5 text-amber-500" />
+              AI Insights
+            </CardTitle>
+            <CardDescription>Intelligent analysis of your financial data</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {insights.length > 0 ? (
+              <div className="space-y-4">
+                {insights.map((insight, index) => (
+                  <div 
+                    key={index} 
+                    className={`rounded-lg border p-4 ${
+                      insight.type === 'expense' 
+                        ? 'border-destructive/30 bg-destructive/5' 
+                        : insight.type === 'income' 
+                          ? 'border-success/30 bg-success/5' 
+                          : 'border-amber-300/30 bg-amber-500/5'
+                    }`}
+                  >
+                    <h4 className="font-semibold mb-1">{insight.title}</h4>
+                    <p className="text-sm text-muted-foreground">{insight.description}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex h-[200px] items-center justify-center text-muted-foreground">
+                Analyzing your financial data...
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Charts */}
         <div className="grid gap-4 md:grid-cols-2">
           <Card>
@@ -118,7 +211,7 @@ export default function Dashboard() {
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(value: number) => `$${value.toFixed(2)}`} />
+                    <Tooltip formatter={(value: number) => [`$${value.toFixed(2)}`, 'Amount']} />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (

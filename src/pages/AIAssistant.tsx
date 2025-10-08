@@ -8,7 +8,7 @@ import { apiKeyStorage, transactionStorage, categoryStorage, fundSourceStorage }
 import { AIResponse } from '@/types/finance';
 import { Send, Bot, User } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-import { parseCurrency } from '@/lib/currency';
+import { parseCurrency, extractCurrencyFromText } from '@/lib/currency';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -101,7 +101,7 @@ Respond ONLY with valid JSON:`;
       }
 
       // Create transaction
-      if (aiResponse.type && aiResponse.amount !== undefined && aiResponse.description) {
+      if (aiResponse.type && aiResponse.description) {
         let categoryId: string | undefined;
         let fundSourceId: string | undefined;
 
@@ -120,7 +120,23 @@ Respond ONLY with valid JSON:`;
           fundSourceId = fundSource?.id;
         }
 
-        const amountInCents = Math.round(aiResponse.amount * 100);
+        // Calculate amount - prioritize AI response, fallback to text extraction
+        let amountInCents: number;
+        if (aiResponse.amount !== undefined) {
+          amountInCents = Math.round(aiResponse.amount * 100);
+        } else {
+          // If AI didn't provide amount, try to extract from user input
+          amountInCents = extractCurrencyFromText(userInput);
+        }
+
+        // If amount is still zero, show an error
+        if (amountInCents === 0) {
+          setMessages(prev => [...prev, { 
+            role: 'assistant', 
+            content: 'Sorry, I couldn\'t identify the amount in your transaction. Please include a specific amount (e.g., "$50", "Rp 150,000", etc.).' 
+          }]);
+          return;
+        }
         
         transactionStorage.create({
           description: aiResponse.description,
@@ -132,7 +148,8 @@ Respond ONLY with valid JSON:`;
           fundSourceId,
         });
 
-        const confirmationMessage = `Got it! I've logged a $${aiResponse.amount.toFixed(2)} ${aiResponse.type} for "${aiResponse.description}"${categoryId ? ` under the "${aiResponse.category}" category` : ''}. Is that correct?`;
+        const amountDisplay = (amountInCents / 100).toFixed(2);
+        const confirmationMessage = `Got it! I've logged a ${amountDisplay} ${aiResponse.type} for "${aiResponse.description}"${categoryId ? ` under the "${aiResponse.category}" category` : ''}. Is that correct?`;
         setMessages(prev => [...prev, { role: 'assistant', content: confirmationMessage }]);
         
         toast({ title: 'Transaction added', description: 'Your transaction has been saved.' });
