@@ -278,52 +278,42 @@ export const transactionStorage = {
       throw new Error("Insufficient funds for transfer");
     }
 
-    const transactions = [
-      {
-        description: `Transfer to ${toFundSource.name}`,
-        amount: amount,
-        type: 'expense' as const,
-        transactionDate: new Date().toISOString(),
-        userId: user.id,
-        sourceFundId: fromFundId,
-        destinationFundId: toFundId,
-      },
-      {
-        description: `Transfer from ${fromFundSource.name}`,
-        amount: amount,
-        type: 'income' as const,
-        transactionDate: new Date().toISOString(),
-        userId: user.id,
-        sourceFundId: fromFundId,
-        destinationFundId: toFundId,
-      },
-    ];
+    // Create transfer transaction
+    const transferTransaction = {
+      description: `Transfer from ${fromFundSource.name} to ${toFundSource.name}`,
+      amount: amount,
+      type: 'transfer' as const,
+      transaction_date: new Date().toISOString(),
+      user_id: user.id,
+      source_fund_id: fromFundId,
+      destination_fund_id: toFundId,
+      category_id: null, // Transfers don't have categories
+    };
 
+    const insertPromises = [supabase.from('transactions').insert([transferTransaction])];
+    
+    // If there's a fee, create a separate expense transaction for it
     if (fee > 0) {
-      transactions.push({
+      const feeTransaction = {
         description: 'Transfer fee',
         amount: fee,
         type: 'expense' as const,
-        transactionDate: new Date().toISOString(),
-        userId: user.id,
-        sourceFundId: fromFundId,
-        destinationFundId: toFundId,
-      });
+        transaction_date: new Date().toISOString(),
+        user_id: user.id,
+        source_fund_id: fromFundId,
+        destination_fund_id: null,
+        category_id: null, // Fee may have a category but for simplicity we'll leave it null
+      };
+      insertPromises.push(supabase.from('transactions').insert([feeTransaction]));
     }
 
-    const transactionsToCreate = transactions.map(t => ({
-      description: t.description,
-      amount: t.amount,
-      type: t.type,
-      transaction_date: t.transactionDate,
-      user_id: t.userId,
-      source_fund_id: t.sourceFundId,
-      destination_fund_id: t.destinationFundId,
-    }));
+    // Execute all inserts
+    const results = await Promise.all(insertPromises);
+    for (const result of results) {
+      if (result.error) throw result.error;
+    }
 
-    const { error: transactionError } = await supabase.from('transactions').insert(transactionsToCreate);
-    if (transactionError) throw transactionError;
-
+    // Update fund source balances
     const newFromBalance = fromFundSource.balance - totalExpense;
     const newToBalance = toFundSource.balance + amount;
 

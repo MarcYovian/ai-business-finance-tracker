@@ -7,20 +7,21 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { aiConfigStorage, categoryStorage, fundSourceStorage } from '@/lib/storage';
-import { Category, FundSource } from '@/types/finance';
+import { aiConfigStorage } from '@/lib/storage';
 import { toast } from '@/hooks/use-toast';
 import { Plus, Trash2, ArrowRightLeft } from 'lucide-react';
 import { formatCurrency } from '@/lib/currency';
 import { TransferDialog } from '@/components/TransferDialog';
+import { useCategories } from '@/hooks/useCategories';
+import { useFundSources } from '@/hooks/useFundSources';
+import { useAddCategory, useDeleteCategory } from '@/hooks/useCategories';
+import { useAddFundSource, useDeleteFundSource } from '@/hooks/useFundSources';
 
 export default function Settings() {
   const { user } = useAuth();
   const [openAIKey, setOpenAIKey] = useState('');
   const [geminiKey, setGeminiKey] = useState('');
   const [aiProvider, setAiProvider] = useState('openai');
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [fundSources, setFundSources] = useState<FundSource[]>([]);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newFundSourceName, setNewFundSourceName] = useState('');
   const [newFundSourceBalance, setNewFundSourceBalance] = useState('');
@@ -30,19 +31,15 @@ export default function Settings() {
     setOpenAIKey(aiConfigStorage.getOpenAIKey() || '');
     setGeminiKey(aiConfigStorage.getGeminiKey() || '');
     setAiProvider(aiConfigStorage.getProvider());
-    loadData();
-  }, [user]);
+  }, []);
 
-  const loadData = async () => {
-    if (user) {
-      const [cats, sources] = await Promise.all([
-        categoryStorage.getAll(user.id),
-        fundSourceStorage.getAll(user.id),
-      ]);
-      setCategories(cats);
-      setFundSources(sources);
-    }
-  };
+  const { data: categories = [] } = useCategories(user?.id || '');
+  const { data: fundSources = [] } = useFundSources(user?.id || '');
+
+  const addCategoryMutation = useAddCategory();
+  const deleteCategoryMutation = useDeleteCategory();
+  const addFundSourceMutation = useAddFundSource();
+  const deleteFundSourceMutation = useDeleteFundSource();
 
   const handleSaveKeys = () => {
     aiConfigStorage.setProvider(aiProvider as 'openai' | 'gemini');
@@ -53,32 +50,48 @@ export default function Settings() {
 
   const handleAddCategory = async () => {
     if (!user || !newCategoryName.trim()) return;
-    await categoryStorage.create(newCategoryName.trim(), user.id);
-    setNewCategoryName('');
-    await loadData();
-    toast({ title: 'Category added' });
+    try {
+      await addCategoryMutation.mutateAsync({ name: newCategoryName.trim(), userId: user.id });
+      setNewCategoryName('');
+      toast({ title: 'Category added' });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Could not add category.', variant: 'destructive' });
+    }
   };
 
   const handleDeleteCategory = async (id: string) => {
-    await categoryStorage.delete(id);
-    await loadData();
-    toast({ title: 'Category deleted' });
+    try {
+      await deleteCategoryMutation.mutateAsync(id);
+      toast({ title: 'Category deleted' });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Could not delete category.', variant: 'destructive' });
+    }
   };
 
   const handleAddFundSource = async () => {
     if (!user || !newFundSourceName.trim()) return;
-    const balanceInCents = Math.round(parseFloat(newFundSourceBalance || '0') * 100);
-    await fundSourceStorage.create(newFundSourceName.trim(), balanceInCents, user.id);
-    setNewFundSourceName('');
-    setNewFundSourceBalance('');
-    await loadData();
-    toast({ title: 'Fund source added' });
+    try {
+      const balanceInCents = Math.round(parseFloat(newFundSourceBalance || '0') * 100);
+      await addFundSourceMutation.mutateAsync({ 
+        name: newFundSourceName.trim(), 
+        balance: balanceInCents, 
+        userId: user.id 
+      });
+      setNewFundSourceName('');
+      setNewFundSourceBalance('');
+      toast({ title: 'Fund source added' });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Could not add fund source.', variant: 'destructive' });
+    }
   };
 
   const handleDeleteFundSource = async (id: string) => {
-    await fundSourceStorage.delete(id);
-    await loadData();
-    toast({ title: 'Fund source deleted' });
+    try {
+      await deleteFundSourceMutation.mutateAsync(id);
+      toast({ title: 'Fund source deleted' });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Could not delete fund source.', variant: 'destructive' });
+    }
   };
 
   return (
@@ -248,10 +261,7 @@ export default function Settings() {
 
       <TransferDialog
         open={isTransferDialogOpen}
-        onClose={() => {
-          setIsTransferDialogOpen(false);
-          loadData(); // Reload data after transfer
-        }}
+        onClose={() => setIsTransferDialogOpen(false)}
         fundSources={fundSources}
       />
     </Layout>

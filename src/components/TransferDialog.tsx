@@ -5,10 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { fundSourceStorage, transactionStorage } from '@/lib/storage';
 import { FundSource } from '@/types/finance';
 import { parseCurrency } from '@/lib/currency';
 import { toast } from '@/hooks/use-toast';
+import { useCreateTransfer } from '@/hooks/useTransactions';
 
 interface TransferDialogProps {
   open: boolean;
@@ -22,6 +22,8 @@ export const TransferDialog = ({ open, onClose, fundSources }: TransferDialogPro
   const [toFundId, setToFundId] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
   const [fee, setFee] = useState('');
+
+  const createTransferMutation = useCreateTransfer();
 
   useEffect(() => {
     if (!open) {
@@ -45,7 +47,12 @@ export const TransferDialog = ({ open, onClose, fundSources }: TransferDialogPro
     const feeInCents = fee ? parseCurrency(fee) : 0;
 
     try {
-      await transactionStorage.createTransfer(fromFundId, toFundId, amountInCents, feeInCents);
+      await createTransferMutation.mutateAsync({
+        fromFundId,
+        toFundId,
+        amount: amountInCents,
+        fee: feeInCents
+      });
       toast({ title: 'Transfer Successful', description: 'Funds have been moved.' });
       onClose();
     } catch (error: any) {

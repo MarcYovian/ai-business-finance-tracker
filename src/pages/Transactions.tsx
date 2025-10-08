@@ -1,47 +1,32 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { transactionStorage, categoryStorage, fundSourceStorage } from '@/lib/storage';
-import { Transaction, Category, FundSource } from '@/types/finance';
+import { Transaction } from '@/types/finance';
 import { formatCurrency, formatDate } from '@/lib/currency';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { TransactionDialog } from '@/components/TransactionDialog';
 import { toast } from '@/hooks/use-toast';
+import { useTransactions } from '@/hooks/useTransactions';
+import { useCategories } from '@/hooks/useCategories';
+import { useFundSources } from '@/hooks/useFundSources';
+import { useDeleteTransaction } from '@/hooks/useTransactions';
 
 export default function Transactions() {
   const { user } = useAuth();
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [fundSources, setFundSources] = useState<FundSource[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
-  const loadData = async () => {
-    if (user) {
-      const [trans, cats, sources] = await Promise.all([
-        transactionStorage.getAll(user.id),
-        categoryStorage.getAll(user.id),
-        fundSourceStorage.getAll(user.id),
-      ]);
-      setTransactions(trans.sort((a, b) => 
-        new Date(b.transactionDate).getTime() - new Date(a.transactionDate).getTime()
-      ));
-      setCategories(cats);
-      setFundSources(sources);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-  }, [user]);
+  const { data: transactions = [], isLoading } = useTransactions(user?.id || '');
+  const { data: categories = [] } = useCategories(user?.id || '');
+  const { data: fundSources = [] } = useFundSources(user?.id || '');
+  const deleteTransactionMutation = useDeleteTransaction();
 
   const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this transaction?')) {
       try {
-        await transactionStorage.delete(id);
-        await loadData();
+        await deleteTransactionMutation.mutateAsync(id);
         toast({ title: 'Transaction deleted', description: 'The transaction has been removed.' });
       } catch (error) {
         toast({ title: 'Error', description: 'Could not delete transaction.', variant: 'destructive' });
@@ -57,7 +42,7 @@ export default function Transactions() {
   const handleDialogClose = () => {
     setIsDialogOpen(false);
     setEditingTransaction(null);
-    loadData(); // Reload data after a transaction is created or updated
+    // No need to manually reload data - TanStack Query handles this automatically
   };
 
   const getCategoryName = (categoryId?: string) => {
@@ -66,11 +51,29 @@ export default function Transactions() {
     return category?.name || 'Uncategorized';
   };
 
-  const getFundSourceName = (fundSourceId?: string) => {
-    if (!fundSourceId) return 'N/A';
-    const source = fundSources.find(s => s.id === fundSourceId);
+  const getFundSourceName = (sourceFundId?: string, destinationFundId?: string) => {
+    // For transfer transactions, we need to show both source and destination
+    if (sourceFundId && destinationFundId) {
+      const source = fundSources.find(s => s.id === sourceFundId);
+      const destination = fundSources.find(s => s.id === destinationFundId);
+      return `${source?.name || 'N/A'} → ${destination?.name || 'N/A'}`;
+    }
+    
+    // For income/expense, use the appropriate fund ID
+    const fundId = sourceFundId || destinationFundId;
+    const source = fundSources.find(s => s.id === fundId);
     return source?.name || 'N/A';
   };
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="flex justify-center items-center h-64">
+          <p className="text-muted-foreground">Loading transactions...</p>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -105,13 +108,23 @@ export default function Transactions() {
                           <div className="mt-1 flex gap-4 text-sm text-muted-foreground">
                             <span>{formatDate(transaction.transactionDate)}</span>
                             <span>•</span>
+                            <span>
+                              {transaction.type === 'transfer' 
+                                ? transaction.type.toUpperCase() 
+                                : transaction.type === 'income' 
+                                  ? 'Income' 
+                                  : transaction.type === 'expense' 
+                                    ? 'Expense'
+                                    : transaction.type}
+                            </span>
+                            <span>•</span>
                             <span>{getCategoryName(transaction.categoryId)}</span>
                             <span>•</span>
-                            <span>{getFundSourceName(transaction.fundSourceId)}</span>
+                            <span>{getFundSourceName(transaction.sourceFundId, transaction.destinationFundId)}</span>
                           </div>
                         </div>
-                        <div className={`text-lg font-semibold ${transaction.type === 'income' ? 'text-success' : 'text-destructive'}`}>
-                          {transaction.type === 'income' ? '+' : '-'}{formatCurrency(transaction.amount)}
+                        <div className={`text-lg font-semibold ${transaction.type === 'income' ? 'text-success' : transaction.type === 'transfer' ? 'text-primary' : 'text-destructive'}`}>
+                          {transaction.type === 'income' ? '+' : transaction.type === 'transfer' ? '' : '-'}{formatCurrency(transaction.amount)}
                         </div>
                       </div>
                     </div>
@@ -127,6 +140,7 @@ export default function Transactions() {
                         variant="ghost"
                         size="icon"
                         onClick={() => handleDelete(transaction.id)}
+                        disabled={deleteTransactionMutation.isPending}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>

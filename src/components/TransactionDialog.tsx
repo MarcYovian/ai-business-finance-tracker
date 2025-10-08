@@ -5,10 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { transactionStorage, categoryStorage, fundSourceStorage } from '@/lib/storage';
 import { Transaction, TransactionType, Category, FundSource } from '@/types/finance';
 import { parseCurrency } from '@/lib/currency';
 import { toast } from '@/hooks/use-toast';
+import { useCategories } from '@/hooks/useCategories';
+import { useFundSources } from '@/hooks/useFundSources';
+import { useAddTransaction, useUpdateTransaction } from '@/hooks/useTransactions';
 
 interface TransactionDialogProps {
   open: boolean;
@@ -25,22 +27,14 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [sourceFundId, setSourceFundId] = useState<string | null>(null);
   const [destinationFundId, setDestinationFundId] = useState<string | null>(null);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [fundSources, setFundSources] = useState<FundSource[]>([]);
+
+  const { data: categories = [] } = useCategories(user?.id || '');
+  const { data: fundSources = [] } = useFundSources(user?.id || '');
+
+  const addTransactionMutation = useAddTransaction();
+  const updateTransactionMutation = useUpdateTransaction();
 
   useEffect(() => {
-    if (user && open) {
-      const fetchData = async () => {
-        const [cats, sources] = await Promise.all([
-          categoryStorage.getAll(user.id),
-          fundSourceStorage.getAll(user.id),
-        ]);
-        setCategories(cats);
-        setFundSources(sources);
-      };
-      fetchData();
-    }
-
     if (transaction) {
       setDescription(transaction.description);
       setAmount((transaction.amount / 100).toString());
@@ -58,7 +52,7 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
       setSourceFundId(null);
       setDestinationFundId(null);
     }
-  }, [transaction, open, user]);
+  }, [transaction]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,18 +62,21 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
     
     try {
       if (transaction) {
-        await transactionStorage.update(transaction.id, {
-          description,
-          amount: amountInCents,
-          type,
-          transactionDate: new Date(date).toISOString(),
-          categoryId: categoryId || undefined,
-          sourceFundId: sourceFundId || undefined,
-          destinationFundId: destinationFundId || undefined,
+        await updateTransactionMutation.mutateAsync({
+          id: transaction.id,
+          updates: {
+            description,
+            amount: amountInCents,
+            type,
+            transactionDate: new Date(date).toISOString(),
+            categoryId: categoryId || undefined,
+            sourceFundId: sourceFundId || undefined,
+            destinationFundId: destinationFundId || undefined,
+          }
         });
         toast({ title: 'Transaction updated', description: 'Your transaction has been saved.' });
       } else {
-        await transactionStorage.create({
+        await addTransactionMutation.mutateAsync({
           description,
           amount: amountInCents,
           type,

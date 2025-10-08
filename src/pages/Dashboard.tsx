@@ -1,47 +1,43 @@
-import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Layout } from '@/components/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { transactionStorage, categoryStorage } from '@/lib/storage';
 import { Transaction, Category } from '@/types/finance';
 import { formatCurrency, formatDate } from '@/lib/currency';
 import { generateInsights } from '@/lib/insights';
 import { TrendingUp, TrendingDown, DollarSign, Receipt, Lightbulb } from 'lucide-react';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { useTransactions } from '@/hooks/useTransactions';
+import { useCategories } from '@/hooks/useCategories';
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [totalIncome, setTotalIncome] = useState(0);
-  const [totalExpenses, setTotalExpenses] = useState(0);
+  
+  const { data: transactions = [], isLoading: transactionsLoading } = useTransactions(user?.id || '');
+  const { data: categories = [], isLoading: categoriesLoading } = useCategories(user?.id || '');
 
-  useEffect(() => {
-    if (user) {
-      const fetchData = async () => {
-        const allTransactions = await transactionStorage.getAll(user.id);
-        const allCategories = await categoryStorage.getAll(user.id);
-        setTransactions(allTransactions);
-        setCategories(allCategories);
+  if (transactionsLoading || categoriesLoading) {
+    return (
+      <Layout>
+        <div className="flex justify-center items-center h-64">
+          <p className="text-muted-foreground">Loading dashboard data...</p>
+        </div>
+      </Layout>
+    );
+  }
 
-        const income = allTransactions
-          .filter(t => t.type === 'income')
-          .reduce((sum, t) => sum + t.amount, 0);
+  // Calculate total income and expenses, excluding transfers
+  const totalIncome = transactions
+    .filter(t => t.type === 'income')
+    .reduce((sum, t) => sum + t.amount, 0);
 
-        const expenses = allTransactions
-          .filter(t => t.type === 'expense')
-          .reduce((sum, t) => sum + t.amount, 0);
+  const totalExpenses = transactions
+    .filter(t => t.type === 'expense')
+    .reduce((sum, t) => sum + t.amount, 0);
 
-        setTotalIncome(income);
-        setTotalExpenses(expenses);
-      };
-
-      fetchData();
-    }
-  }, [user]);
-
-  // Prepare monthly data for bar chart
-  const monthlyData = transactions.reduce((acc: { month: string; income: number; expenses: number }[], transaction) => {
+  // Prepare monthly data for bar chart (excluding transfers)
+  const monthlyData = transactions.reduce((acc: { month: string; income: number; expenses: number; transfers: number }[], transaction) => {
+    if (transaction.type === 'transfer') return acc; // Exclude transfers from income/expense charts
+    
     const date = new Date(transaction.transactionDate);
     // Skip transactions with invalid dates
     if (isNaN(date.getTime())) {
@@ -52,14 +48,16 @@ export default function Dashboard() {
     // Find existing month or create new entry
     let monthData = acc.find(item => item.month === monthKey);
     if (!monthData) {
-      monthData = { month: monthKey, income: 0, expenses: 0 };
+      monthData = { month: monthKey, income: 0, expenses: 0, transfers: 0 };
       acc.push(monthData);
     }
     
     if (transaction.type === 'income') {
       monthData.income += transaction.amount / 100; // Convert from cents to dollars for display
-    } else {
+    } else if (transaction.type === 'expense') {
       monthData.expenses += transaction.amount / 100; // Convert from cents to dollars for display
+    } else if (transaction.type === 'transfer') {
+      monthData.transfers += transaction.amount / 100; // Track transfers separately if needed
     }
     
     return acc;
@@ -79,11 +77,11 @@ export default function Dashboard() {
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
 
   // Generate insights
-  const insights = user ? generateInsights(transactions, categories) : [];
+  const insights = generateInsights(transactions, categories);
 
   const netProfit = totalIncome - totalExpenses;
 
-  // Recent transactions
+  // Recent transactions (excluding transfers from display but including them in data)
   const validTransactions = transactions.filter(t => !isNaN(new Date(t.transactionDate).getTime()));
   const recentTransactions = [...validTransactions]
     .sort((a, b) => new Date(b.transactionDate).getTime() - new Date(a.transactionDate).getTime())
@@ -136,7 +134,7 @@ export default function Dashboard() {
         <Card>
           <CardHeader>
             <CardTitle>Income vs Expenses Over Time</CardTitle>
-            <CardDescription>Monthly breakdown of your financial activity</CardDescription>
+            <CardDescription>Monthly breakdown of your financial activity (excluding transfers)</CardDescription>
           </CardHeader>
           <CardContent>
             {monthlyData.length > 0 ? (
@@ -144,8 +142,8 @@ export default function Dashboard() {
                 <BarChart data={monthlyData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" />
-                  <YAxis tickFormatter={(value) => `$${value}`} />
-                  <Tooltip formatter={(value) => [`$${value}`, 'Amount']} />
+                  <YAxis tickFormatter={(value) => `${value}`} />
+                  <Tooltip formatter={(value) => [`${value}`, 'Amount']} />
                   <Legend />
                   <Bar dataKey="income" name="Income" fill="#10b981" radius={[4, 4, 0, 0]} />
                   <Bar dataKey="expenses" name="Expenses" fill="#ef4444" radius={[4, 4, 0, 0]} />
@@ -220,7 +218,7 @@ export default function Dashboard() {
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(value: number) => [`$${value.toFixed(2)}`, 'Amount']} />
+                    <Tooltip formatter={(value: number) => [`${value.toFixed(2)}`, 'Amount']} />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
@@ -248,8 +246,14 @@ export default function Dashboard() {
                           <p className="text-xs text-muted-foreground">{formatDate(transaction.transactionDate)}</p>
                         </div>
                       </div>
-                      <p className={`text-sm font-semibold ${transaction.type === 'income' ? 'text-success' : 'text-destructive'}`}>
-                        {transaction.type === 'income' ? '+' : '-'}{formatCurrency(transaction.amount)}
+                      <p className={`text-sm font-semibold ${
+                        transaction.type === 'income' 
+                          ? 'text-success' 
+                          : transaction.type === 'transfer'
+                            ? 'text-primary'
+                            : 'text-destructive'
+                      }`}>
+                        {transaction.type === 'income' ? '+' : transaction.type === 'transfer' ? '→' : '-'}{formatCurrency(transaction.amount)}
                       </p>
                     </div>
                   ))}
