@@ -1,6 +1,12 @@
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
@@ -13,13 +19,66 @@ import {
 } from "@/lib/storage";
 import { AIResponse } from "@/types/finance";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { Bot, Send, User } from "lucide-react";
+import { Bot, Send, Sparkles, User } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+
+// Helper function to extract JSON from a string that might contain markdown code blocks
+const extractJsonFromString = (text: string): any | null => {
+  // Try to match JSON within ```json ... ``` blocks first
+  const jsonRegex = /```json\s*([\s\S]*?)\s*```|```(?:javascript)?\s*({[\s\S]*?})\s*```|({[\s\S]*?})|(\[[\s\S]*?\])/;
+  const match = text.match(jsonRegex);
+  if (match) {
+    // Prioritize the captured group that is not undefined
+    const jsonString = match[1] || match[2] || match[3] || match[4];
+    if (jsonString) {
+      try {
+        return JSON.parse(jsonString.trim());
+      } catch (e) {
+        console.error("Failed to parse extracted JSON:", e);
+        // If the primary method fails, try to find the JSON object by matching braces
+        const braceStart = text.indexOf('{');
+        const braceEnd = text.lastIndexOf('}');
+        if (braceStart !== -1 && braceEnd !== -1 && braceEnd > braceStart) {
+          const potentialJson = text.substring(braceStart, braceEnd + 1);
+          try {
+            return JSON.parse(potentialJson);
+          } catch (fallbackError) {
+            console.error("Fallback JSON parsing also failed:", fallbackError);
+          }
+        }
+      }
+    }
+  }
+  return null;
+};
 
 interface Message {
   role: "user" | "assistant";
   content: string;
 }
+
+const LoadingIndicator = () => (
+  <div className="flex items-center gap-2">
+    <div className="h-2 w-2 bg-muted-foreground rounded-full animate-pulse [animation-delay:-0.3s]" />
+    <div className="h-2 w-2 bg-muted-foreground rounded-full animate-pulse [animation-delay:-0.15s]" />
+    <div className="h-2 w-2 bg-muted-foreground rounded-full animate-pulse" />
+  </div>
+);
+
+const PromptSuggestion = ({
+  text,
+  onClick,
+}: {
+  text: string;
+  onClick: (prompt: string) => void;
+}) => (
+  <button
+    onClick={() => onClick(text)}
+    className="text-sm text-primary border border-primary/50 rounded-full px-3 py-1 hover:bg-primary/10 transition-colors"
+  >
+    {text}
+  </button>
+);
 
 export default function AIAssistant() {
   const { user } = useAuth();
@@ -27,7 +86,7 @@ export default function AIAssistant() {
     {
       role: "assistant",
       content:
-        'Hi! I\'m your AI finance assistant. Tell me about your transactions in natural language, like "I spent $50 on lunch today" or "Received $1,200 for consulting work".',
+        "Hi! I'm your AI finance assistant. Tell me about your transactions in natural language, or ask me a question about your data.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -43,7 +102,7 @@ export default function AIAssistant() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, isLoading]);
 
   const processWithGemini = async (
     apiKey: string,
@@ -54,8 +113,7 @@ export default function AIAssistant() {
     const result = await model.generateContent(prompt);
     const response = await result.response;
     let text = response.text();
-    // Clean the response to get only the JSON part
-    text = text.replace(/```json\n/g, "").replace(/\n```/g, "");
+    text = text.replace(/```json\\n/g, "").replace(/\\n```/g, "");
     return text;
   };
 
@@ -79,98 +137,21 @@ export default function AIAssistant() {
         temperature: 0.3,
       }),
     });
-
-    if (!response.ok) {
-      throw new Error("OpenAI API request failed");
-    }
-
+    if (!response.ok) throw new Error("OpenAI API request failed");
     const data = await response.json();
     return data.choices[0].message.content;
   };
 
-  const processAIResponse = async (userInput: string) => {
-    if (!user) return;
+  const handleSend = async (prompt?: string) => {
+    const userMessage = (prompt || input).trim();
+    if (!userMessage) return;
 
-    // --- NEW LOGIC: CHECK FOR ONGOING CONVERSATION FIRST ---
-    if (conversationContext) {
-      await handleFollowUp(userInput, conversationContext);
-      setConversationContext(null); // Clear the memory after use
-      return; // End the function here
-    }
-
-    const provider = aiConfigStorage.getProvider();
-    const apiKey = aiConfigStorage.getActiveKey();
-
-    if (!apiKey) {
-      toast({
-        title: "API Key Required",
-        description: `Please set your ${
-          provider === "gemini" ? "Gemini" : "OpenAI"
-        } API key in Settings.`,
-        variant: "destructive",
-      });
-      return;
-    }
+    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+    setInput("");
+    setIsLoading(true);
 
     try {
-      // --- FIRST AI CALL: INTENT CLASSIFICATION ---
-      const classifierPrompt = `You are an intent classification expert. Your job is to analyze the user's input and determine their primary intent. Respond ONLY with a valid JSON object.
-
-The possible intents are:
-- "log_transaction": The user is describing a financial transaction (income, expense, or transfer) that needs to be recorded.
-- "query_data": The user is asking a question about their financial data.
-- "general_help": The user is asking about your capabilities, greeting you, or having a general conversation.
-
-JSON Output Schema:
-- If intent is "log_transaction" or "general_help", return: {"intent": "intent_name"}
-- If intent is "query_data", also extract the core question: {"intent": "query_data", "query": "summarized user question in English"}
-
-Examples:
-1. User Input: "kemarin beli bensin 50 ribu"
-   Your JSON Response: {"intent": "log_transaction"}
-2. User Input: "berapa total pengeluaran bulan ini?"
-   Your JSON Response: {"intent": "query_data", "query": "total expenses this month"}
-3. User Input: "apa saja yang bisa kamu lakukan?"
-   Your JSON Response: {"intent": "general_help"}
-
-User Input: "${userInput}"
-Your JSON Response:`;
-
-      let classificationContent: string;
-      if (provider === "gemini") {
-        classificationContent = await processWithGemini(
-          apiKey,
-          classifierPrompt
-        );
-      } else {
-        classificationContent = await processWithOpenAI(
-          apiKey,
-          classifierPrompt,
-          userInput
-        );
-      }
-      const classification = JSON.parse(classificationContent);
-
-      // --- ROUTE TO THE CORRECT HANDLER BASED ON INTENT ---
-      switch (classification.intent) {
-        case "log_transaction":
-          await handleLogTransaction(userInput);
-          break;
-        case "query_data":
-          await handleQueryData(userInput, classification.query);
-          break;
-        case "general_help":
-          handleGeneralHelp();
-          break;
-        default:
-          setMessages((prev) => [
-            ...prev,
-            {
-              role: "assistant",
-              content: "Sorry, I don't understand that request.",
-            },
-          ]);
-      }
+      await processAIResponse(userMessage);
     } catch (error) {
       console.error("AI processing error:", error);
       toast({
@@ -186,6 +167,109 @@ Your JSON Response:`;
         },
       ]);
     }
+    setIsLoading(false);
+  };
+
+  const processAIResponse = async (userInput: string) => {
+    if (!user) return;
+
+    if (conversationContext) {
+      await handleFollowUp(userInput, conversationContext);
+      setConversationContext(null);
+      return;
+    }
+
+    const provider = aiConfigStorage.getProvider();
+    const apiKey = aiConfigStorage.getActiveKey();
+    if (!apiKey) {
+      toast({
+        title: "API Key Required",
+        description: `Please set your ${
+          provider === "gemini" ? "Gemini" : "OpenAI"
+        } API key in Settings.`,
+        variant: "destructive",
+      });
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: `I can't work without an API key. Please add one in the settings.`,
+        },
+      ]);
+      return;
+    }
+
+    const classifierPrompt = `You are an intent classification expert. Your job is to analyze the user's input and determine their primary intent. Your response MUST be a valid JSON object, and nothing else.
+
+The possible intents are:
+- "log_transaction": The user is describing a financial transaction.
+- "query_data": The user is asking a question about their financial data.
+- "general_help": The user is asking about your capabilities, greeting you, or having a general conversation.
+
+JSON Output Schema:
+- For "log_transaction" or "general_help", return: {"intent": "intent_name"}
+- For "query_data", also extract the core question: {"intent": "query_data", "query": "summarized user question in English"}
+
+**IMPORTANT: Always wrap your response in a single JSON object.**
+
+**Correct Example:**
+User Input: "I bought coffee for 25k"
+Your JSON Response: {"intent": "log_transaction"}
+
+**Incorrect Example (DO NOT DO THIS):**
+User Input: "I bought coffee for 25k"
+Your JSON Response: "log_transaction"
+
+User Input: "${userInput}"
+
+Your JSON Response:`;
+
+    let classificationContent: string;
+    if (provider === "gemini") {
+      classificationContent = await processWithGemini(apiKey, classifierPrompt);
+    } else {
+      classificationContent = await processWithOpenAI(
+        apiKey,
+        classifierPrompt,
+        userInput
+      );
+    }
+
+    let classification = extractJsonFromString(classificationContent);
+
+    // --- NEW SAFEGUARD ---
+    // If classification is not a valid object with an intent, handle it.
+    if (!classification || typeof classification.intent !== 'string') {
+      // Sometimes the AI might just return the intent as a string.
+      if (typeof classificationContent === 'string' && ['log_transaction', 'query_data', 'general_help'].includes(classificationContent.trim().toLowerCase())) {
+        classification = { intent: classificationContent.trim().toLowerCase() };
+      } else {
+        // If we still can't figure it out, default to general_help to be safe.
+        classification = { intent: 'general_help' };
+      }
+    }
+
+    // The switch statement can now safely access classification.intent
+    switch (classification.intent) {
+      case "log_transaction":
+        await handleLogTransaction(userInput);
+        break;
+      case "query_data":
+        await handleQueryData(userInput, userInput.toLowerCase());
+        break;
+      case "general_help":
+        handleGeneralHelp();
+        break;
+      default:
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content:
+              "I'm not sure how to categorize your request. You can ask me to log a transaction or query your financial data.",
+          },
+        ]);
+    }
   };
 
   const handleFollowUp = async (followUpInput: string, context: any) => {
@@ -199,7 +283,7 @@ Your JSON Response:`;
       // Re-run the transaction logging with the combined info
       await handleLogTransaction(combinedInput);
     }
-    // You can add more \`else if\` blocks here for other context types in the future.
+    // You can add more `else if` blocks here for other context types in the future.
   };
 
   const handleLogTransaction = async (userInput: string) => {
@@ -277,7 +361,12 @@ Respond ONLY with valid JSON:
         aiContent = await processWithOpenAI(apiKey, systemPrompt, userInput);
       }
 
-      const aiResponse: AIResponse = JSON.parse(aiContent);
+      // Use the new helper function to extract JSON from potential markdown
+      const aiResponse: AIResponse | null = extractJsonFromString(aiContent);
+
+      if (!aiResponse) {
+        throw new Error("AI response could not be parsed as valid JSON");
+      }
 
       // Check if clarification is needed and save context
       if (aiResponse.clarification_needed) {
@@ -476,7 +565,6 @@ Respond ONLY with valid JSON:
           { role: "assistant", content: confirmationMessage },
         ]);
       }
-
     } catch (error: any) {
       console.error("AI processing error:", error);
       if (error.message.includes("Insufficient funds")) {
@@ -679,6 +767,12 @@ Your Answer:`;
           originalQuery
         );
       }
+      // Clean up the response to remove any markdown code blocks
+      finalAnswer = finalAnswer
+        .replace(/```json\\n?/g, '')
+        .replace(/```\s*$/g, '')  // Remove trailing code blocks
+        .replace(/^```\w*\\n?/g, '')  // Remove leading code blocks
+        .trim();
 
       setMessages((prev) => [
         ...prev,
@@ -702,16 +796,6 @@ Your Answer:`;
     }
   };
 
-  const handleSend = async () => {
-    if (!input.trim()) return;
-    const userMessage = input.trim();
-    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
-    setInput("");
-    setIsLoading(true);
-    await processAIResponse(userMessage);
-    setIsLoading(false);
-  };
-
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -721,78 +805,99 @@ Your Answer:`;
 
   return (
     <Layout>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold">AI Assistant</h1>
+      <div className="h-[calc(100vh-10rem)] flex flex-col">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold flex items-center gap-2">
+            <Sparkles className="h-6 w-6 text-primary" />
+            AI Assistant
+          </h1>
           <p className="text-muted-foreground">
-            Tell me about your transactions in natural language
+            Your smart financial command center.
           </p>
         </div>
 
-        <Card className="h-[600px] flex flex-col">
-          <CardHeader>
-            <CardTitle>Chat</CardTitle>
-          </CardHeader>
-          <CardContent className="flex-1 flex flex-col">
-            <div className="flex-1 overflow-y-auto space-y-4 mb-4">
+        <Card className="flex-1 flex flex-col">
+          <CardContent className="flex-1 flex flex-col p-4">
+            <div
+              className="flex-1 overflow-y-auto space-y-6 p-2 -m-2"
+              ref={messagesEndRef}
+            >
               {messages.map((message, index) => (
                 <div
                   key={index}
-                  className={`flex gap-3 ${
+                  className={`flex gap-3 text-sm ${
                     message.role === "user" ? "justify-end" : "justify-start"
                   }`}
                 >
                   {message.role === "assistant" && (
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent">
-                      <Bot className="h-4 w-4" />
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <Bot className="h-5 w-5" />
                     </div>
                   )}
                   <div
-                    className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                    className={`max-w-[85%] rounded-lg px-4 py-2 ${
                       message.role === "user"
                         ? "bg-primary text-primary-foreground"
                         : "bg-muted"
                     }`}
                   >
-                    <p className="text-sm">{message.content}</p>
+                    <p>{message.content}</p>
                   </div>
-                  {message.role === "user" && (
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary">
-                      <User className="h-4 w-4 text-primary-foreground" />
-                    </div>
-                  )}
                 </div>
               ))}
               {isLoading && (
-                <div className="flex gap-3 justify-start">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent">
-                    <Bot className="h-4 w-4" />
+                <div className="flex gap-3 text-sm justify-start">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <Bot className="h-5 w-5" />
                   </div>
                   <div className="bg-muted rounded-lg px-4 py-2">
-                    <p className="text-sm">Thinking...</p>
+                    <LoadingIndicator />
                   </div>
                 </div>
               )}
-              <div ref={messagesEndRef} />
+              {messages.length <= 1 && !isLoading && (
+                <div className="flex flex-col items-center text-center pt-8">
+                  <p className="text-muted-foreground mb-4">
+                    Or try one of these prompts:
+                  </p>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <PromptSuggestion
+                      text="I spent 50,000 on coffee"
+                      onClick={handleSend}
+                    />
+                    <PromptSuggestion
+                      text="Log an income of 1,200,000 for consulting"
+                      onClick={handleSend}
+                    />
+                    <PromptSuggestion
+                      text="What were my total expenses last month?"
+                      onClick={handleSend}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
-
-            <div className="flex gap-2">
+          </CardContent>
+          <CardFooter className="border-t p-4">
+            <div className="relative w-full">
               <Textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Type your transaction here... (e.g., 'I spent $50 on lunch today')"
-                className="min-h-[60px]"
+                placeholder="Type your message... (e.g., 'I spent $50 on lunch today')"
+                className="min-h-[48px] rounded-lg pr-12 resize-none"
                 disabled={isLoading}
               />
               <Button
-                onClick={handleSend}
+                size="icon"
+                onClick={() => handleSend()}
                 disabled={isLoading || !input.trim()}
+                className="absolute top-1/2 right-3 -translate-y-1/2"
               >
                 <Send className="h-4 w-4" />
               </Button>
             </div>
-          </CardContent>
+          </CardFooter>
         </Card>
       </div>
     </Layout>
