@@ -240,7 +240,7 @@ export default function Dashboard() {
                       <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${t.type === 'income' ? 'bg-success/10 text-success' : t.type === 'transfer' ? 'bg-primary/10 text-primary' : 'bg-destructive/10 text-destructive'}`}>
                         <Receipt className="h-5 w-5" />
                       </div>
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <p className="font-medium truncate">{t.description}</p>
                         <p className="text-sm text-muted-foreground">{formatDate(t.transactionDate)}</p>
                       </div>

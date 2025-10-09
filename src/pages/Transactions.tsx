@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Transaction } from '@/types/finance';
 import { formatCurrency, formatDate } from '@/lib/currency';
-import { Plus, Pencil, Trash2, ArrowUp, ArrowDown, ArrowRightLeft, AlertCircle } from 'lucide-react';
+import { Plus, Pencil, Trash2, AlertCircle } from 'lucide-react';
 import { TransactionDialog } from '@/components/TransactionDialog';
 import { toast } from '@/hooks/use-toast';
 import { useTransactions, useDeleteTransaction } from '@/hooks/useTransactions';
@@ -14,6 +14,7 @@ import { useFundSources } from '@/hooks/useFundSources';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { TransactionIcon } from '@/components/TransactionIcon';
 
 const TransactionLoading = () => (
   <Layout>
@@ -114,14 +115,7 @@ export default function Transactions() {
 
   const getFundSourceName = (fundId?: string) => fundSources.find(s => s.id === fundId)?.name || 'N/A';
 
-  const renderTransactionIcon = (type: Transaction['type']) => {
-    switch (type) {
-      case 'income': return <ArrowUp className="h-5 w-5" />;
-      case 'expense': return <ArrowDown className="h-5 w-5" />;
-      case 'transfer': return <ArrowRightLeft className="h-5 w-5" />;
-      default: return <AlertCircle className="h-5 w-5" />;
-    }
-  };
+
 
   if (isLoading) {
     return <TransactionLoading />;
@@ -142,18 +136,27 @@ export default function Transactions() {
         </div>
 
         <Card>
-          <CardHeader>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <CardTitle>History</CardTitle>
-              <div className="flex items-center gap-2">
-                <ToggleGroup type="single" value={typeFilter} onValueChange={setTypeFilter} defaultValue="all">
+          <CardHeader className="p-4 sm:p-6">
+            <div className="flex flex-col gap-4">
+              <div>
+                <CardTitle>All Transactions</CardTitle>
+                <CardDescription>View and manage your financial activity.</CardDescription>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
+                <ToggleGroup
+                  type="single"
+                  defaultValue="all"
+                  value={typeFilter}
+                  onValueChange={(value) => setTypeFilter(value as Transaction['type'] | 'all')}
+                  className="w-full sm:w-auto"
+                >
                   <ToggleGroupItem value="all">All</ToggleGroupItem>
                   <ToggleGroupItem value="income">Income</ToggleGroupItem>
                   <ToggleGroupItem value="expense">Expense</ToggleGroupItem>
                   <ToggleGroupItem value="transfer">Transfer</ToggleGroupItem>
                 </ToggleGroup>
                 <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="w-[180px]">
+                  <SelectTrigger className="w-full sm:w-[180px]">
                     <SelectValue placeholder="Sort by" />
                   </SelectTrigger>
                   <SelectContent>
@@ -170,27 +173,38 @@ export default function Transactions() {
             {filteredAndSortedTransactions.length > 0 ? (
               <div className="space-y-4">
                 {filteredAndSortedTransactions.map(t => (
-                  <div key={t.id} className="flex items-center gap-4 rounded-lg border p-3 pr-4">
-                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${t.type === 'income' ? 'bg-success/10 text-success' : t.type === 'transfer' ? 'bg-primary/10 text-primary' : 'bg-destructive/10 text-destructive'}`}>
-                      {renderTransactionIcon(t.type)}
+                  <div key={t.id} className="flex items-center gap-4 p-2 -m-2 rounded-lg hover:bg-muted">
+                    {/* Icon Section */}
+                    <div className="flex-shrink-0">
+                      <TransactionIcon type={t.type} />
                     </div>
-                    <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-x-4 items-center">
-                      <p className="font-medium truncate col-span-2 sm:col-span-1">{t.description}</p>
-                      <div className="text-sm text-muted-foreground">
-                        <p>{formatDate(t.transactionDate)}</p>
-                        <p className="sm:hidden">{t.type === 'transfer' ? getFundSourceName(t.sourceFundId) : getCategoryName(t.categoryId)}</p>
+
+                    {/* Main Content Section */}
+                    <div className="flex-grow flex flex-col sm:flex-row sm:items-center sm:gap-4">
+                      <div className="flex-grow space-y-0.5">
+                        <p className="font-medium leading-tight">{t.description}</p>
+                        <p className="text-sm text-muted-foreground">{formatDate(t.transactionDate)}</p>
+                        <p className="text-sm text-muted-foreground sm:hidden">
+                          {t.type === 'transfer' ? getFundSourceName(t.sourceFundId) : getCategoryName(t.categoryId)}
+                        </p>
                       </div>
-                      <div className="hidden sm:block text-sm text-muted-foreground">
-                        <p>{t.type === 'transfer' ? getFundSourceName(t.sourceFundId) : getCategoryName(t.categoryId)}</p>
-                        <p>{t.type === 'transfer' ? getFundSourceName(t.destinationFundId) : getFundSourceName(t.sourceFundId || t.destinationFundId)}</p>
+
+                      {/* Amount and Actions Section */}
+                      <div className="flex items-center gap-2 sm:ml-auto mt-2 sm:mt-0">
+                        <p className={`font-semibold text-sm sm:text-base ${
+                          t.type === 'income' ? 'text-success' : t.type === 'transfer' ? 'text-primary' : 'text-destructive'
+                        }`}>
+                          {t.type === 'income' ? '+' : t.type === 'expense' ? '-' : ''}{formatCurrency(t.amount)}
+                        </p>
+                        <div className="flex">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(t)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDelete(t.id)} disabled={deleteTransactionMutation.isPending}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2 ml-auto">
-                      <p className={`font-semibold text-right ${t.type === 'income' ? 'text-success' : t.type === 'transfer' ? 'text-primary' : 'text-destructive'}`}>
-                        {t.type === 'income' ? '+' : t.type === 'expense' ? '-' : ''}{formatCurrency(t.amount)}
-                      </p>
-                      <Button variant="ghost" size="icon" onClick={() => handleEdit(t)}><Pencil className="h-4 w-4" /></Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(t.id)} disabled={deleteTransactionMutation.isPending}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                     </div>
                   </div>
                 ))}
