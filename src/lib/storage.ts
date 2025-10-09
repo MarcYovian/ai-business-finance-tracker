@@ -1,3 +1,4 @@
+import { formatCurrency } from "./currency";
 import { Category, FundSource, Transaction, User } from "@/types/finance";
 import { supabase } from "./supabase";
 
@@ -229,6 +230,23 @@ export const transactionStorage = {
   create: async (
     transaction: Omit<Transaction, "id" | "createdAt">
   ): Promise<Transaction> => {
+    // Check for sufficient funds for expense transactions
+    if ((transaction.type === 'expense' || transaction.type === 'transfer') && transaction.sourceFundId) {
+      const { data: sourceFund, error: fundError } = await supabase
+        .from('fund_sources')
+        .select('balance')
+        .eq('id', transaction.sourceFundId)
+        .single();
+
+      if (fundError || !sourceFund) {
+        throw new Error('Source fund not found.');
+      }
+
+      if (sourceFund.balance < transaction.amount) {
+        throw new Error('Insufficient funds in the source account.');
+      }
+    }
+
     const { data: newTransaction, error } = await supabase
       .rpc("create_transaction_and_update_balance", {
         p_description: transaction.description,
@@ -314,7 +332,11 @@ export const transactionStorage = {
 
     const totalExpense = amount + fee;
     if (fromFundSource.balance < totalExpense) {
-      throw new Error("Insufficient funds for transfer");
+      throw new Error(
+        `Insufficient funds. Available: ${formatCurrency(
+          fromFundSource.balance
+        )}, Required: ${formatCurrency(totalExpense)}.`
+      );
     }
 
     // Create transfer transaction

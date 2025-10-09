@@ -89,8 +89,8 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
         toast({ title: 'Transaction created', description: 'Your transaction has been added.' });
       }
       onClose();
-    } catch (error) {
-      toast({ title: 'Error', description: 'Something went wrong.', variant: 'destructive' });
+    } catch (error: any) {
+      toast({ title: 'Transaction Failed', description: error.message, variant: 'destructive' });
     }
   };
 

@@ -32,6 +32,9 @@ export default function AIAssistant() {
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [conversationContext, setConversationContext] = useState<any | null>(
+    null
+  );
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -86,6 +89,15 @@ export default function AIAssistant() {
   };
 
   const processAIResponse = async (userInput: string) => {
+    if (!user) return;
+
+    // --- NEW LOGIC: CHECK FOR ONGOING CONVERSATION FIRST ---
+    if (conversationContext) {
+      await handleFollowUp(userInput, conversationContext);
+      setConversationContext(null); // Clear the memory after use
+      return; // End the function here
+    }
+
     const provider = aiConfigStorage.getProvider();
     const apiKey = aiConfigStorage.getActiveKey();
 
@@ -99,8 +111,6 @@ export default function AIAssistant() {
       });
       return;
     }
-
-    if (!user) return;
 
     try {
       // --- FIRST AI CALL: INTENT CLASSIFICATION ---
@@ -128,25 +138,38 @@ Your JSON Response:`;
 
       let classificationContent: string;
       if (provider === "gemini") {
-        classificationContent = await processWithGemini(apiKey, classifierPrompt);
+        classificationContent = await processWithGemini(
+          apiKey,
+          classifierPrompt
+        );
       } else {
-        classificationContent = await processWithOpenAI(apiKey, classifierPrompt, userInput);
+        classificationContent = await processWithOpenAI(
+          apiKey,
+          classifierPrompt,
+          userInput
+        );
       }
       const classification = JSON.parse(classificationContent);
 
       // --- ROUTE TO THE CORRECT HANDLER BASED ON INTENT ---
       switch (classification.intent) {
-        case 'log_transaction':
-          await handleLogTransaction(userInput, provider, apiKey);
+        case "log_transaction":
+          await handleLogTransaction(userInput);
           break;
-        case 'query_data':
-          await handleQueryData(userInput, classification.query, provider, apiKey);
+        case "query_data":
+          await handleQueryData(userInput, classification.query);
           break;
-        case 'general_help':
+        case "general_help":
           handleGeneralHelp();
           break;
         default:
-          setMessages(prev => [...prev, { role: 'assistant', content: "Sorry, I don't understand that request." }]);
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: "Sorry, I don't understand that request.",
+            },
+          ]);
       }
     } catch (error) {
       console.error("AI processing error:", error);
@@ -165,8 +188,36 @@ Your JSON Response:`;
     }
   };
 
-  const handleLogTransaction = async (userInput: string, provider: string, apiKey: string) => {
+  const handleFollowUp = async (followUpInput: string, context: any) => {
+    if (context.type === "log_transaction") {
+      const originalData = context.partial_data;
+      // Construct a new, combined input for the AI
+      const combinedInput = `The original request was to log a transaction: ${JSON.stringify(
+        originalData
+      )}. The user has provided the following additional information to complete it: "${followUpInput}". Please process this and return the complete JSON for the transaction.`;
+
+      // Re-run the transaction logging with the combined info
+      await handleLogTransaction(combinedInput);
+    }
+    // You can add more \`else if\` blocks here for other context types in the future.
+  };
+
+  const handleLogTransaction = async (userInput: string) => {
     if (!user) return;
+
+    const provider = aiConfigStorage.getProvider();
+    const apiKey = aiConfigStorage.getActiveKey();
+
+    if (!apiKey) {
+      toast({
+        title: "API Key Required",
+        description: `Please set your ${
+          provider === "gemini" ? "Gemini" : "OpenAI"
+        } API key in Settings.`,
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
       const [categories, fundSources] = await Promise.all([
@@ -182,9 +233,9 @@ You are an expert financial assistant for a user in Indonesia. Your task is to e
 2.  **Language & Currency:** The user will communicate in Indonesian. Interpret amounts accordingly (e.g., '50 ribu' is 50000, '1.5 juta' is 1500000). The currency is Indonesian Rupiah (IDR).
 
 **Context:**
-- Current date: ${new Date().toISOString().split('T')[0]}
-- User's categories: ${categories.map(c => c.name).join(', ') || 'none'}
-- User's fund sources: ${fundSources.map(f => f.name).join(', ') || 'none'}
+- Current date: ${new Date().toISOString().split("T")[0]}
+- User's categories: ${categories.map((c) => c.name).join(", ") || "none"}
+- User's fund sources: ${fundSources.map((f) => f.name).join(", ") || "none"}
 
 **JSON Schema to Extract:**
 
@@ -199,20 +250,20 @@ For each transaction, extract the following fields:
 - "destinationFund": **ONLY for "transfer" type.** The name of the fund where the money went.
 
 **Clarification:**
-If any detail is unclear, respond with: {"clarification_needed": "Ask a specific, targeted question to resolve the ambiguity."}
+If any detail is unclear, your JSON response MUST be in this format: {"clarification_needed": "Your specific question to the user", "partial_data": { ... any fields you have already extracted ... }}
 
 **Examples:**
 
 - User input: "kemarin bayar parkir 5 ribu dan beli kopi 25 ribu dari gopay"
 - Expected JSON output:
 [
-  {"type": "expense", "amount": 5000, "description": "bayar parkir", "date": "2025-10-07", "category": "Transportasi", "fundSource": "gopay"},
-  {"type": "expense", "amount": 25000, "description": "beli kopi", "date": "2025-10-07", "category": "Makanan", "fundSource": "gopay"}
+  {"type": "expense", "amount": 5000, "description": "bayar parkir", "date": "2025-10-08", "category": "Transportasi", "fundSource": "gopay"},
+  {"type": "expense", "amount": 25000, "description": "beli kopi", "date": "2025-10-08", "category": "Makanan", "fundSource": "gopay"}
 ]
 
 - User input: "pindahin 500rb dari bca ke dana"
 - Expected JSON output:
-{"type": "transfer", "amount": 500000, "description": "Pindah dana dari bca ke dana", "date": "2025-10-08", "sourceFund": "bca", "destinationFund": "dana"}
+{"type": "transfer", "amount": 500000, "description": "Pindah dana dari bca ke dana", "date": "2025-10-09", "sourceFund": "bca", "destinationFund": "dana"}
 
 User input: ${userInput}
 
@@ -228,20 +279,29 @@ Respond ONLY with valid JSON:
 
       const aiResponse: AIResponse = JSON.parse(aiContent);
 
+      // Check if clarification is needed and save context
       if (aiResponse.clarification_needed) {
+        // Save the partial data and the current task type to memory
+        setConversationContext({
+          type: "log_transaction",
+          partial_data: aiResponse.partial_data,
+        });
+        // Ask the user the clarifying question
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", content: aiResponse.clarification_needed! },
+          { role: "assistant", content: aiResponse.clarification_needed },
         ]);
-        return;
+        return; // Stop processing and wait for the user's follow-up
       }
 
       // Handle both single transaction object and array of transactions
-      const transactions = Array.isArray(aiResponse) ? aiResponse : [aiResponse];
-      
+      const transactions = Array.isArray(aiResponse)
+        ? aiResponse
+        : [aiResponse];
+
       for (const transaction of transactions) {
         if (!transaction.type || !transaction.description) continue;
-        
+
         let categoryId: string | undefined;
         if (transaction.category) {
           let category = await categoryStorage.findByName(
@@ -259,10 +319,10 @@ Respond ONLY with valid JSON:
 
         let sourceFundId: string | undefined;
         let destinationFundId: string | undefined;
-        
+
         // Determine fund sources based on transaction type
         switch (transaction.type) {
-          case 'expense':
+          case "expense":
             if (transaction.fundSource) {
               const fundSource = await fundSourceStorage.findByName(
                 transaction.fundSource,
@@ -271,8 +331,8 @@ Respond ONLY with valid JSON:
               sourceFundId = fundSource?.id;
             }
             break;
-            
-          case 'income':
+
+          case "income":
             if (transaction.fundSource) {
               const fundSource = await fundSourceStorage.findByName(
                 transaction.fundSource,
@@ -281,8 +341,8 @@ Respond ONLY with valid JSON:
               destinationFundId = fundSource?.id;
             }
             break;
-            
-          case 'transfer':
+
+          case "transfer":
             if (transaction.sourceFund) {
               const source = await fundSourceStorage.findByName(
                 transaction.sourceFund,
@@ -300,7 +360,7 @@ Respond ONLY with valid JSON:
               }
               sourceFundId = source.id;
             }
-            
+
             if (transaction.destinationFund) {
               const destination = await fundSourceStorage.findByName(
                 transaction.destinationFund,
@@ -318,13 +378,14 @@ Respond ONLY with valid JSON:
               }
               destinationFundId = destination.id;
             }
-            
+
             if (!sourceFundId || !destinationFundId) {
               setMessages((prev) => [
                 ...prev,
                 {
                   role: "assistant",
-                  content: "Transfers require both a source and destination fund. Please specify both.",
+                  content:
+                    "Transfers require both a source and destination fund. Please specify both.",
                 },
               ]);
               return;
@@ -357,26 +418,30 @@ Respond ONLY with valid JSON:
             ? new Date(transaction.date).toISOString()
             : new Date().toISOString(),
           userId: user.id,
-          categoryId: transaction.type === 'transfer' ? undefined : categoryId, // Transfers don't have categories
+          categoryId: transaction.type === "transfer" ? undefined : categoryId, // Transfers don't have categories
           sourceFundId,
           destinationFundId,
         });
 
         // Update fund source balances based on transaction type
-        if (transaction.type === 'income' && destinationFundId) {
+        if (transaction.type === "income" && destinationFundId) {
           // For income, increase the destination fund's balance
-          const fundSource = await fundSourceStorage.getAll(user.id).then(funds => funds.find(f => f.id === destinationFundId));
+          const fundSource = await fundSourceStorage
+            .getAll(user.id)
+            .then((funds) => funds.find((f) => f.id === destinationFundId));
           if (fundSource) {
             await fundSourceStorage.update(destinationFundId, {
-              balance: fundSource.balance + amountInCents
+              balance: fundSource.balance + amountInCents,
             });
           }
-        } else if (transaction.type === 'expense' && sourceFundId) {
+        } else if (transaction.type === "expense" && sourceFundId) {
           // For expense, decrease the source fund's balance
-          const fundSource = await fundSourceStorage.getAll(user.id).then(funds => funds.find(f => f.id === sourceFundId));
+          const fundSource = await fundSourceStorage
+            .getAll(user.id)
+            .then((funds) => funds.find((f) => f.id === sourceFundId));
           if (fundSource) {
             await fundSourceStorage.update(sourceFundId, {
-              balance: fundSource.balance - amountInCents
+              balance: fundSource.balance - amountInCents,
             });
           }
         }
@@ -384,50 +449,75 @@ Respond ONLY with valid JSON:
         // so we don't need to handle it here
 
         const amountDisplay = (amountInCents / 100).toFixed(2);
-        
-        let confirmationMessage = '';
+
+        let confirmationMessage = "";
         switch (transaction.type) {
-          case 'income':
-            confirmationMessage = `Got it! I've logged an income of ${amountDisplay} to "${transaction.description}"${destinationFundId ? ` in ${transaction.fundSource}` : ''}.`;
+          case "income":
+            confirmationMessage = `Got it! I've logged an income of ${amountDisplay} to "${
+              transaction.description
+            }"${destinationFundId ? ` in ${transaction.fundSource}` : ""}.`;
             break;
-          case 'expense':
-            confirmationMessage = `Got it! I've logged an expense of ${amountDisplay} for "${transaction.description}"${sourceFundId ? ` from ${transaction.fundSource}` : ''}.`;
+          case "expense":
+            confirmationMessage = `Got it! I've logged an expense of ${amountDisplay} for "${
+              transaction.description
+            }"${sourceFundId ? ` from ${transaction.fundSource}` : ""}.`;
             break;
-          case 'transfer':
-            confirmationMessage = `Got it! I've logged a transfer of ${amountDisplay} from "${transaction.description}"${sourceFundId ? ` from ${transaction.sourceFund}` : ''}${destinationFundId ? ` to ${transaction.destinationFund}` : ''}.`;
+          case "transfer":
+            confirmationMessage = `Got it! I've logged a transfer of ${amountDisplay} from "${
+              transaction.description
+            }"${sourceFundId ? ` from ${transaction.sourceFund}` : ""}${
+              destinationFundId ? ` to ${transaction.destinationFund}` : ""
+            }.`;
             break;
         }
-        
+
         setMessages((prev) => [
           ...prev,
           { role: "assistant", content: confirmationMessage },
         ]);
       }
-      
-      toast({ title: "Transaction(s) added" });
-    } catch (error) {
+
+    } catch (error: any) {
       console.error("AI processing error:", error);
-      toast({
-        title: "Error",
-        description: "Failed to process your request.",
-        variant: "destructive",
-      });
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: "Sorry, I encountered an error. Please try rephrasing.",
-        },
-      ]);
+      if (error.message.includes("Insufficient funds")) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content:
+              "Maaf, saldo di sumber dana Anda tidak mencukupi untuk melakukan transaksi ini.",
+          },
+        ]);
+      } else {
+        toast({
+          title: "Transaction Failed",
+          description: error.message,
+          variant: "destructive",
+        });
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: "Sorry, I encountered an error. Please try rephrasing.",
+          },
+        ]);
+      }
     }
   };
 
   const handleGeneralHelp = () => {
-    const helpMessage = "Of course! I can help you log transactions (income, expenses, transfers) using everyday language. You can also ask me questions about your financial data, like 'What were my total earnings last month?' or 'What's my biggest spending category?'.";
-    setMessages(prev => [...prev, { role: 'assistant', content: helpMessage }]);
+    const helpMessage =
+      "Of course! I can help you log transactions (income, expenses, transfers) using everyday language. You can also ask me questions about your financial data, like 'What were my total earnings last month?' or 'What's my biggest spending category?'.";
+    setMessages((prev) => [
+      ...prev,
+      { role: "assistant", content: helpMessage },
+    ]);
   };
 
-  const handleQueryData = async (originalQuery: string, normalizedQuery: string, provider: string, apiKey: string) => {
+  const handleQueryData = async (
+    originalQuery: string,
+    normalizedQuery: string
+  ) => {
     if (!user) return;
 
     try {
@@ -437,7 +527,7 @@ Respond ONLY with valid JSON:
         categoryStorage.getAll(user.id),
         fundSourceStorage.getAll(user.id),
       ]);
-      
+
       let dataSummary = {};
       const now = new Date();
       const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -446,37 +536,61 @@ Respond ONLY with valid JSON:
       const startOfLastYear = new Date(now.getFullYear() - 1, 0, 1);
 
       // Check for different query types
-      if (normalizedQuery.toLowerCase().includes("expenses this month") || 
-          normalizedQuery.toLowerCase().includes("pengeluaran bulan ini") ||
-          normalizedQuery.toLowerCase().includes("total pengeluaran")) {
+      if (
+        normalizedQuery.toLowerCase().includes("expenses this month") ||
+        normalizedQuery.toLowerCase().includes("pengeluaran bulan ini") ||
+        normalizedQuery.toLowerCase().includes("total pengeluaran")
+      ) {
         const expensesThisMonth = transactions
-          .filter(t => t.type === 'expense' && new Date(t.transactionDate) >= thisMonth)
+          .filter(
+            (t) =>
+              t.type === "expense" && new Date(t.transactionDate) >= thisMonth
+          )
           .reduce((sum, t) => sum + t.amount, 0);
 
         dataSummary = {
           query: "total expenses this month",
           totalExpensesInCents: expensesThisMonth,
-          month: now.toLocaleString('id-ID', { month: 'long', year: 'numeric' })
+          month: now.toLocaleString("id-ID", {
+            month: "long",
+            year: "numeric",
+          }),
         };
-      } else if (normalizedQuery.toLowerCase().includes("income this month") || 
-                 normalizedQuery.toLowerCase().includes("pemasukan bulan ini") ||
-                 normalizedQuery.toLowerCase().includes("total pemasukan")) {
+      } else if (
+        normalizedQuery.toLowerCase().includes("income this month") ||
+        normalizedQuery.toLowerCase().includes("pemasukan bulan ini") ||
+        normalizedQuery.toLowerCase().includes("total pemasukan")
+      ) {
         const incomeThisMonth = transactions
-          .filter(t => t.type === 'income' && new Date(t.transactionDate) >= thisMonth)
+          .filter(
+            (t) =>
+              t.type === "income" && new Date(t.transactionDate) >= thisMonth
+          )
           .reduce((sum, t) => sum + t.amount, 0);
 
         dataSummary = {
           query: "total income this month",
           totalIncomeInCents: incomeThisMonth,
-          month: now.toLocaleString('id-ID', { month: 'long', year: 'numeric' })
+          month: now.toLocaleString("id-ID", {
+            month: "long",
+            year: "numeric",
+          }),
         };
-      } else if (normalizedQuery.toLowerCase().includes("net profit this month") || 
-                 normalizedQuery.toLowerCase().includes("net profit bulan ini")) {
+      } else if (
+        normalizedQuery.toLowerCase().includes("net profit this month") ||
+        normalizedQuery.toLowerCase().includes("net profit bulan ini")
+      ) {
         const incomeThisMonth = transactions
-          .filter(t => t.type === 'income' && new Date(t.transactionDate) >= thisMonth)
+          .filter(
+            (t) =>
+              t.type === "income" && new Date(t.transactionDate) >= thisMonth
+          )
           .reduce((sum, t) => sum + t.amount, 0);
         const expensesThisMonth = transactions
-          .filter(t => t.type === 'expense' && new Date(t.transactionDate) >= thisMonth)
+          .filter(
+            (t) =>
+              t.type === "expense" && new Date(t.transactionDate) >= thisMonth
+          )
           .reduce((sum, t) => sum + t.amount, 0);
 
         dataSummary = {
@@ -484,40 +598,48 @@ Respond ONLY with valid JSON:
           totalIncomeInCents: incomeThisMonth,
           totalExpensesInCents: expensesThisMonth,
           netProfitInCents: incomeThisMonth - expensesThisMonth,
-          month: now.toLocaleString('id-ID', { month: 'long', year: 'numeric' })
+          month: now.toLocaleString("id-ID", {
+            month: "long",
+            year: "numeric",
+          }),
         };
-      } else if (normalizedQuery.toLowerCase().includes("top category") || 
-                 normalizedQuery.toLowerCase().includes("biggest spending") ||
-                 normalizedQuery.toLowerCase().includes("kategori terbesar")) {
-        const expenseByCategory = categories.map(cat => {
-          const total = transactions
-            .filter(t => t.type === 'expense' && t.categoryId === cat.id)
-            .reduce((sum, t) => sum + t.amount, 0);
-          return { name: cat.name, total };
-        }).filter(item => item.total > 0);
+      } else if (
+        normalizedQuery.toLowerCase().includes("top category") ||
+        normalizedQuery.toLowerCase().includes("biggest spending") ||
+        normalizedQuery.toLowerCase().includes("kategori terbesar")
+      ) {
+        const expenseByCategory = categories
+          .map((cat) => {
+            const total = transactions
+              .filter((t) => t.type === "expense" && t.categoryId === cat.id)
+              .reduce((sum, t) => sum + t.amount, 0);
+            return { name: cat.name, total };
+          })
+          .filter((item) => item.total > 0);
 
         if (expenseByCategory.length > 0) {
-          const topCategory = expenseByCategory.reduce((prev, current) => 
-            (prev.total > current.total) ? prev : current
+          const topCategory = expenseByCategory.reduce((prev, current) =>
+            prev.total > current.total ? prev : current
           );
 
           dataSummary = {
             query: "top expense category",
             topCategory: topCategory.name,
-            totalSpentInCents: topCategory.total
+            totalSpentInCents: topCategory.total,
           };
         } else {
           dataSummary = {
             query: "top expense category",
             topCategory: "No expenses recorded",
-            totalSpentInCents: 0
+            totalSpentInCents: 0,
           };
         }
       } else {
         // Default fallback for unrecognized queries
         dataSummary = {
           query: originalQuery,
-          message: "I'm working on understanding more types of financial questions. Could you ask about your expenses, income, or top spending categories?"
+          message:
+            "I'm working on understanding more types of financial questions. Could you ask about your expenses, income, or top spending categories?",
         };
       }
 
@@ -532,15 +654,36 @@ User's Original Question: "${originalQuery}"
 
 Your Answer:`;
 
+      const provider = aiConfigStorage.getProvider();
+      const apiKey = aiConfigStorage.getActiveKey();
+
+      if (!apiKey) {
+        toast({
+          title: "API Key Required",
+          description: `Please set your ${
+            provider === "gemini" ? "Gemini" : "OpenAI"
+          } API key in Settings.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
       // 3. Make the second AI call to get the final answer
       let finalAnswer: string;
       if (provider === "gemini") {
         finalAnswer = await processWithGemini(apiKey, answererPrompt);
       } else {
-        finalAnswer = await processWithOpenAI(apiKey, answererPrompt, originalQuery);
+        finalAnswer = await processWithOpenAI(
+          apiKey,
+          answererPrompt,
+          originalQuery
+        );
       }
 
-      setMessages(prev => [...prev, { role: 'assistant', content: finalAnswer }]);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: finalAnswer },
+      ]);
     } catch (error) {
       console.error("Error processing data query:", error);
       toast({
@@ -548,12 +691,13 @@ Your Answer:`;
         description: "Failed to process your data query.",
         variant: "destructive",
       });
-      setMessages(prev => [
+      setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: "Sorry, I encountered an error while processing your data query. Please try rephrasing your question."
-        }
+          content:
+            "Sorry, I encountered an error while processing your data query. Please try rephrasing your question.",
+        },
       ]);
     }
   };
