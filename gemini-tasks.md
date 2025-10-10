@@ -1,76 +1,74 @@
-# Project: Refactor Application for Mobile-First Responsive Design and Improved UI/UX
+# Prompt: Redesign the Landing Page for "AI-Fi Tracker" with Advanced UI, Animations, and a Modern Color Palette
 
-## 1. High-Level Goal
+## 1. Role and Goal
 
-I need you to act as an expert UI/UX designer and senior frontend developer. Your task is to refactor the entire React application to be fully responsive, adopting a **mobile-first design philosophy**.
+Act as an expert senior frontend developer and UI/UX designer specializing in creating premium, modern, and engaging landing pages. Your goal is to completely redesign and build the UI for the landing page (`src/pages/Index.tsx`) of a SaaS application named **"AI-Fi Tracker"**.
 
-The current application has a static, desktop-centric layout that is not usable on mobile devices. The goal is to create a seamless, intuitive, and aesthetically pleasing user experience across all screen sizes, from small phones to large desktop monitors.
+The new design must be fully responsive (mobile-first) and built using **React, TypeScript, Vite, Tailwind CSS, shadcn/ui components, and Framer Motion for animations**.
 
-## 2. Problem Description
+## 2. Design, Animation, and Aesthetics
 
-The primary issues with the current codebase are:
+The landing page's primary goal is to look professional, trustworthy, and technologically advanced to attract users and encourage sign-ups.
 
-1.  **Static Layout:** The main layout component (`src/components/Layout.tsx`) uses a fixed-width sidebar (`w-64`) which does not adapt to smaller viewports, causing content to be pushed off-screen or become squished.
-2.  **Desktop-First Grids:** Pages like `Dashboard.tsx` use multi-column grids (e.g., `md:grid-cols-3`) that are not configured to stack vertically on smaller screens, making them unusable on mobile.
-3.  **Poor Mobile Experience:** Forms, tables, and dialogs across the application are not optimized for touch input or small screens, leading to a frustrating user experience.
-4.  **Lack of Responsive Navigation:** There is no mobile-friendly navigation mechanism like a "hamburger" menu or a slide-out drawer.
+- **Color Palette (Modern & Trustworthy Blue)**:
 
-## 3. Required Changes & Instructions
+  - **Primary Color**: Use a deep navy blue (approx. `#0A2540`) for primary buttons and key highlights. Map this to `hsl(var(--primary))`.
+  - **Accent Color**: Use a vibrant cyan/teal (approx. `#00D4FF`) for secondary highlights, icons, and gradients. Map this to `hsl(var(--accent))`.
+  - **Background**: Use a clean, light gray (approx. `#F8F9FA`). Map this to `hsl(var(--background))`.
+  - **Text**: Use a dark gray (approx. `#1F2937`). Map this to `hsl(var(--foreground))`.
 
-You must refactor the application, focusing on the files below, to implement a fluid, responsive design.
+- **Animations (using Framer Motion)**:
 
-### Step 1: Create a Responsive Main Layout (`src/components/Layout.tsx`)
+  - **On-Load Animation**: The Hero Section elements (headline, description, buttons) should stagger-fade-in on page load.
+  - **Scroll Animation**: All subsequent sections (Features, Testimonials, CTA) should smoothly fade in and slide up as they enter the viewport (`whileInView`).
+  - **Micro-interactions**: Buttons and Cards should have a subtle scale-up effect on hover (`whileHover={{ scale: 1.03 }}`).
 
-This is the most critical part of the refactor. The entire navigation structure needs to be rebuilt to be responsive.
+- **Component Library**: You **MUST** use components from `shadcn/ui` (e.g., `<Button>`, `<Card>`).
+- **Icons**: You **MUST** use icons from the `lucide-react` library.
 
-1.  **Detect Screen Size:** Use the existing `useIsMobile` hook (`src/hooks/use-mobile.tsx`) to conditionally render different layouts for mobile and desktop.
-2.  **Mobile View (`isMobile === true`):**
-    - The main sidebar (`<aside>`) should be **hidden by default**.
-    - Create a new, simple **header component** at the top of the main content area.
-    - This header should contain a "hamburger" menu icon button (`Menu` from `lucide-react`).
-    - When the hamburger button is clicked, it should open a **slide-out drawer** (`Sheet` component from `shadcn/ui`).
-    - The `Sheet` component must contain the navigation links that are currently in the desktop sidebar (`navItems`). Each link should be clearly visible and tappable.
-3.  **Desktop View (`isMobile === false`):**
-    - The existing layout with the visible, fixed-width sidebar should be maintained as it is already suitable for larger screens.
-4.  **Refactor Navigation:** The `navItems` array and mapping logic should be extracted so it can be reused in both the desktop sidebar and the mobile `Sheet` to avoid code duplication.
+## 3. Required File and Component Structure
 
-### Step 2: Make Dashboard Grids Responsive (`src/pages/Dashboard.tsx`)
+Please provide the complete, single-file code for `src/pages/Index.tsx`. Integrate `framer-motion` for all animations as described below. The page should be structured with these sections:
 
-Update the dashboard to ensure all elements are clearly visible and usable on a single-column mobile layout.
+### a. Header / Navigation Bar
 
-1.  **Key Metrics Grid:** Modify the 3-column grid to stack vertically on mobile. Change the Tailwind classes from `md:grid-cols-3` to something like `grid grid-cols-1 gap-4 md:grid-cols-3`.
-2.  **Charts Grid:** Modify the 2-column grid for "Expense Breakdown" and "Recent Transactions" to also stack vertically on mobile. Use classes like `grid grid-cols-1 gap-4 lg:grid-cols-2`.
-3.  **Chart Sizes:** Ensure the `ResponsiveContainer` for the charts functions correctly and doesn't cause horizontal overflow on small screens.
+A sticky, translucent navigation bar with a frosted glass effect (`backdrop-blur-lg`).
 
-### Step 3: Adapt Other Pages for Mobile (`Transactions.tsx`, `Settings.tsx`)
+- **Left Side**: The app name "AI-Fi Tracker" with a `<Bot />` icon.
+- **Right Side**: "Login" (`variant="ghost"`) and "Sign Up" buttons that navigate to `/auth`.
 
-Review and refactor other pages to ensure a consistent and user-friendly mobile experience.
+### b. Hero Section
 
-1.  **In `Settings.tsx`:**
-    - The form for adding a new "Fund Source" has two input fields side-by-side. Make this layout wrap into a vertical stack on mobile screens.
-    - Ensure the `Tabs` component from `shadcn/ui` is responsive and easy to use on mobile.
-2.  **In `Transactions.tsx`:**
-    - Review the layout for each transaction item in the list. While the current flex layout might be acceptable, ensure that long descriptions or details do not cause horizontal overflow. Adjust the layout if necessary to stack details vertically on smaller screens.
-3.  **In `TransactionDialog.tsx` & `TransferDialog.tsx`:**
-    - Verify that these dialogs are fully responsive. The content should fit comfortably within the viewport on a mobile device without requiring horizontal scrolling. `shadcn/ui` dialogs are generally good, but confirm the content within them is also fluid.
+- **Layout**: Centered text with a compelling visual below.
+- **Content**:
+  - Headline: `Intelligent Finance Tracking, Simplified by AI.`
+  - Subheading: "Stop wrestling with spreadsheets. Just describe your transactions in plain English and let our AI handle the rest. Get insights, save time, and take control of your business finances."
+  - CTA: A large primary `<Button>` saying "Get Started for Free" with an `<ArrowRight />` icon.
+- **Visual Element**: A placeholder `div` for a product screenshot, styled with rounded corners and a subtle gradient border using the accent color.
+- **Animation**: Apply a staggered `initial={{ opacity: 0, y: 20 }}` to `animate={{ opacity: 1, y: 0 }}` effect to the headline, subheading, and CTA.
 
-### Step 4: General UI/UX Polish
+### c. Features Section
 
-Apply small but important touches to improve the overall experience.
+- **Layout**: A 3-column grid on desktop, stacking to a single column on mobile.
+- **Content**: Use `motion.div` wrapped `<Card>` components for each feature.
+  - **Icons**: `<Bot />` (AI Assistant), `<TrendingUp />` (Smart Insights), `<Zap />` (Effortless Tracking). Place each icon in a colored circle.
+- **Animation**: Each card should have `initial={{ opacity: 0, y: 50 }}` and `whileInView={{ opacity: 1, y: 0 }}` with a `viewport={{ once: true }}` prop. Apply a small delay for each card to make them appear sequentially.
 
-1.  **Padding and Spacing:** Add appropriate padding to the main content wrapper on mobile to ensure content doesn't touch the screen edges (e.g., `p-4` instead of `p-8` on mobile).
-2.  **Tap Targets:** Ensure all interactive elements like buttons and inputs are large enough to be easily tapped on a mobile device.
+### d. Social Proof / Testimonials Section
 
----
+- **Layout**: A 2-column grid.
+- **Content**: Use `motion.div` wrapped `<Card>` components for two placeholder testimonials, each with an `<Avatar>`, name, and quote.
+- **Animation**: Apply the same `whileInView` fade-in and slide-up animation as the Features section.
 
-## 5. Final Output
+### e. Final Call to Action (CTA) Section
 
-Please provide the complete, refactored code for all the modified files, which should primarily include:
+- **Content**: A centered headline: "Ready to take control of your finances?" followed by a large "Sign Up Now" `<Button>`.
+- **Animation**: Apply the `whileInView` animation.
 
-- **`src/components/Layout.tsx`** (with the new responsive logic)
-- **`src/pages/Dashboard.tsx`**
-- **`src/pages/Settings.tsx`**
-- **`src/pages/Transactions.tsx`**
-- Any other components that required adjustments for responsiveness.
+### f. Footer
 
-The final application must be fully responsive and offer a premium user experience on both mobile and desktop.
+- **Content**: Simple footer with app name, copyright, and placeholder links.
+
+## 4. Final Output
+
+Provide the complete, single-file code for `src/pages/Index.tsx`. The code must import `motion` from `framer-motion` and use it to implement all the specified animations. The styling must reflect the modern color palette and be fully responsive.
