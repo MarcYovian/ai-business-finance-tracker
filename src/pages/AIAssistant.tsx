@@ -321,6 +321,16 @@ You are an expert financial assistant for a user in Indonesia. Your task is to e
 - User's categories: ${categories.map((c) => c.name).join(", ") || "none"}
 - User's fund sources: ${fundSources.map((f) => f.name).join(", ") || "none"}
 
+**New Category Structure:**
+Categories in the system now have two important attributes:
+- **Typed Categories**: Every category is explicitly defined as either 'income' or 'expense'.
+- **Hierarchical Structure**: Categories can have parent-child relationships (sub-categories). For example, "Breakfast" could be a sub-category of "Food & Beverage".
+
+When matching user input to categories, you should:
+1. Try to match to the most specific sub-category available.
+2. If the input is general (e.g., "spending on food"), match to the parent category.
+3. Consider the transaction type ('income' or 'expense') when matching categories - ensure the type matches.
+
 **JSON Schema to Extract:**
 
 For each transaction, extract the following fields:
@@ -328,7 +338,7 @@ For each transaction, extract the following fields:
 - "amount": The numeric value of the transaction.
 - "description": A brief summary of the transaction.
 - "date": In YYYY-MM-DD format. Interpret relative Indonesian dates like 'kemarin' (yesterday), 'lusa' (day after tomorrow), or 'Rabu lalu' (last Wednesday) based on the current date. Default to today if not specified.
-- "category": For "income" or "expense" types. First, try to match the description to the most semantically similar category from the user's list. If no suitable match is found, suggest a concise, new category name.
+- "category": For "income" or "expense" types. First, try to match the description to the most semantically similar category from the user's list, prioritizing specific sub-categories. Ensure the category type matches the transaction type. If no suitable match is found, suggest a concise, new category name.
 - "fundSource": For an "expense", this is the source of the funds. For an "income", this is the destination.
 - "sourceFund": **ONLY for "transfer" type.** The name of the fund where the money came from.
 - "destinationFund": **ONLY for "transfer" type.** The name of the fund where the money went.
@@ -338,6 +348,7 @@ If any detail is unclear, your JSON response MUST be in this format: {"clarifica
 
 **Examples:**
 
+- User input: "sarapan bubur 15rb". User's categories include "Food & Beverage" with a sub-category "Breakfast". Expected JSON output should use the "Breakfast" category.
 - User input: "kemarin bayar parkir 5 ribu dan beli kopi 25 ribu dari gopay"
 - Expected JSON output:
 [
@@ -697,11 +708,25 @@ Respond ONLY with valid JSON:
         normalizedQuery.toLowerCase().includes("kategori terbesar")
       ) {
         const expenseByCategory = categories
-          .map((cat) => {
-            const total = transactions
-              .filter((t) => t.type === "expense" && t.categoryId === cat.id)
-              .reduce((sum, t) => sum + t.amount, 0);
-            return { name: cat.name, total };
+          .filter(cat => !cat.parentId) // Only get parent categories to avoid duplication with sub-categories
+          .map((parentCat) => {
+            // Get all expense transactions for this parent category and its sub-categories
+            const parentTransactions = transactions.filter(t => 
+              t.type === "expense" && t.categoryId === parentCat.id
+            );
+            
+            // Get sub-categories for this parent
+            const subCategories = categories.filter(cat => cat.parentId === parentCat.id);
+            // Get all expense transactions for sub-categories
+            const subCategoryTransactions = transactions.filter(t => 
+              t.type === "expense" && subCategories.some(sub => sub.id === t.categoryId)
+            );
+            
+            // Calculate total for parent + sub-categories
+            const parentTotal = parentTransactions.reduce((sum, t) => sum + t.amount, 0);
+            const subTotal = subCategoryTransactions.reduce((sum, t) => sum + t.amount, 0);
+            
+            return { name: parentCat.name, total: parentTotal + subTotal };
           })
           .filter((item) => item.total > 0);
 

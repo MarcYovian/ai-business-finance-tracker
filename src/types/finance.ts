@@ -11,6 +11,8 @@ export interface Category {
   name: string;
   userId: string;
   createdAt: string;
+  type: 'income' | 'expense';
+  parentId?: string | null;
 }
 
 export interface FundSource {

@@ -96,12 +96,36 @@ export default function Dashboard() {
     return acc;
   }, []).sort((a, b) => new Date(a.month).getTime() - new Date(b.month).getTime());
 
-  const expenseByCategory = categories.map(cat => ({
-    name: cat.name,
-    value: transactions
-      .filter(t => t.type === 'expense' && t.categoryId === cat.id)
-      .reduce((sum, t) => sum + t.amount, 0) / 100,
-  })).filter(item => item.value > 0);
+  // Group expense transactions by parent category for the pie chart
+  const expenseByCategory = (() => {
+    const parentCategories = categories.filter(cat => !cat.parentId);
+    const subCategories = categories.filter(cat => cat.parentId);
+    
+    return parentCategories
+      .map(parent => {
+        // Get all expense transactions for this parent category and its sub-categories
+        const parentTransactions = transactions.filter(t => 
+          t.type === 'expense' && t.categoryId === parent.id
+        );
+        
+        // Get all sub-categories for this parent
+        const parentSubCategories = subCategories.filter(sub => sub.parentId === parent.id);
+        // Get all expense transactions for this parent's sub-categories
+        const subCategoryTransactions = transactions.filter(t => 
+          t.type === 'expense' && parentSubCategories.some(sub => sub.id === t.categoryId)
+        );
+        
+        // Calculate total value for this parent (including its sub-categories)
+        const parentValue = parentTransactions.reduce((sum, t) => sum + t.amount, 0) / 100;
+        const subValue = subCategoryTransactions.reduce((sum, t) => sum + t.amount, 0) / 100;
+        
+        return {
+          name: parent.name,
+          value: parentValue + subValue
+        };
+      })
+      .filter(item => item.value > 0); // Only include categories with transactions
+  })();
 
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
 
@@ -166,7 +190,7 @@ export default function Dashboard() {
                 <BarChart data={monthlyData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="month" tickLine={false} axisLine={false} />
-                  <YAxis tickFormatter={(value) => `$${value / 1000}k`} tickLine={false} axisLine={false} />
+                  <YAxis tickFormatter={(value) => `${value / 1000}k`} tickLine={false} axisLine={false} />
                   <Tooltip cursor={{ fill: 'hsl(var(--muted))' }} contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))' }} />
                   <Legend />
                   <Bar dataKey="income" name="Income" fill="hsl(var(--success))" radius={[4, 4, 0, 0]} />

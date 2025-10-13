@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from '@/components/ui/select';
 import { Transaction, TransactionType, Category, FundSource } from '@/types/finance';
 import { parseCurrency } from '@/lib/currency';
 import { toast } from '@/hooks/use-toast';
@@ -28,7 +28,8 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
   const [sourceFundId, setSourceFundId] = useState<string | null>(null);
   const [destinationFundId, setDestinationFundId] = useState<string | null>(null);
 
-  const { data: categories = [] } = useCategories(user?.id || '');
+  // Filter categories based on transaction type
+  const { data: categories = [] } = useCategories(user?.id || '', type === 'transfer' ? undefined : type);
   const { data: fundSources = [] } = useFundSources(user?.id || '');
 
   const addTransactionMutation = useAddTransaction();
@@ -53,6 +54,11 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
       setDestinationFundId(null);
     }
   }, [transaction]);
+
+  // Group categories by parent for hierarchical display
+  const parentCategories = categories.filter(cat => !cat.parentId);
+  const subCategories = categories.filter(cat => cat.parentId);
+  const getSubCategories = (parentId: string) => subCategories.filter(sub => sub.parentId === parentId);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -162,8 +168,14 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none">None</SelectItem>
-                  {categories.map(cat => (
-                    <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                  {parentCategories.map(parent => (
+                    <SelectGroup key={parent.id}>
+                      <SelectLabel>{parent.name}</SelectLabel>
+                      <SelectItem value={parent.id} className="pl-6">{parent.name}</SelectItem>
+                      {getSubCategories(parent.id).map(sub => (
+                        <SelectItem key={sub.id} value={sub.id} className="pl-8">{sub.name}</SelectItem>
+                      ))}
+                    </SelectGroup>
                   ))}
                 </SelectContent>
               </Select>

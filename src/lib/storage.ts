@@ -47,11 +47,17 @@ export const userStorage = {
 
 // Category operations
 export const categoryStorage = {
-  getAll: async (userId: string): Promise<Category[]> => {
-    const { data, error } = await supabase
+  getAll: async (userId: string, type?: 'income' | 'expense'): Promise<Category[]> => {
+    let query = supabase
       .from("categories")
       .select("*")
       .eq("user_id", userId);
+    
+    if (type) {
+      query = query.eq("type", type);
+    }
+    
+    const { data, error } = await query;
     if (error) throw error;
 
     return (
@@ -60,14 +66,16 @@ export const categoryStorage = {
         name: category.name,
         userId: category.user_id,
         createdAt: category.created_at,
+        type: category.type,
+        parentId: category.parent_id || null,
       })) || []
     );
   },
 
-  create: async (name: string, userId: string): Promise<Category> => {
+  create: async (name: string, userId: string, type: 'income' | 'expense', parentId: string | null = null): Promise<Category> => {
     const { data, error } = await supabase
       .from("categories")
-      .insert([{ name, user_id: userId }])
+      .insert([{ name, user_id: userId, type, parent_id: parentId }])
       .select();
     if (error) throw error;
 
@@ -77,15 +85,33 @@ export const categoryStorage = {
       name: result.name,
       userId: result.user_id,
       createdAt: result.created_at,
+      type: result.type,
+      parentId: result.parent_id || null,
     };
   },
 
-  update: async (id: string, name: string): Promise<void> => {
-    const { error } = await supabase
+  update: async (id: string, updates: Partial<Category>): Promise<Category> => {
+    const updatesForDb: any = {};
+    if (updates.name) updatesForDb.name = updates.name;
+    if (updates.type) updatesForDb.type = updates.type;
+    if (updates.parentId !== undefined) updatesForDb.parent_id = updates.parentId;
+    
+    const { data, error } = await supabase
       .from("categories")
-      .update({ name })
-      .eq("id", id);
+      .update(updatesForDb)
+      .eq("id", id)
+      .select()
+      .single();
     if (error) throw error;
+    
+    return {
+      id: data.id,
+      name: data.name,
+      userId: data.user_id,
+      createdAt: data.created_at,
+      type: data.type,
+      parentId: data.parent_id || null,
+    };
   },
 
   delete: async (id: string): Promise<void> => {
@@ -112,6 +138,8 @@ export const categoryStorage = {
         name: category.name,
         userId: category.user_id,
         createdAt: category.created_at,
+        type: category.type,
+        parentId: category.parent_id || null,
       };
     }
     return undefined;
