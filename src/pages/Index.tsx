@@ -1,15 +1,24 @@
-
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
 import { ArrowRight, Bot, TrendingUp, Zap } from "lucide-react";
+import { Link } from "react-router-dom";
 
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 // Helper component for consistent section styling
-const Section = ({ children, className, ...props }: React.HTMLAttributes<HTMLElement>) => (
+const Section = ({
+  children,
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLElement>) => (
   <section className={cn("container py-16 md:py-24", className)} {...props}>
     {children}
   </section>
@@ -82,186 +91,232 @@ const HeroSection = () => {
         >
           Intelligent Finance Tracking,
           <br />
-          <span className="bg-gradient-to-r from-primary to-cyan-400 bg-clip-text text-transparent">
-            Simplified by AI.
-          </span>
+          <span className="text-accent">Simplified by AI.</span>
         </motion.h1>
+
         <motion.p
           variants={itemVariants}
-          className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground md:text-xl"
+          className="mt-6 max-w-2xl text-lg text-muted-foreground md:text-xl"
         >
-          Stop wrestling with spreadsheets. Just describe your transactions in plain English and let our AI handle the rest. Get insights, save time, and take control of your business finances.
+          Stop wrestling with spreadsheets. Just describe your transactions in
+          plain English and let our AI handle the rest. Get insights, save time,
+          and take control of your business finances.
         </motion.p>
+
         <motion.div variants={itemVariants} className="mt-8">
           <Button size="lg" asChild>
             <Link to="/auth">
               Get Started for Free
-              <ArrowRight className="ml-2 h-5 w-5" />
+              <ArrowRight className="ml-2" />
             </Link>
           </Button>
         </motion.div>
-      </motion.div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 50, scale: 0.9 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.8, delay: 0.8, ease: "easeOut" }}
-        className="relative mx-auto mt-12 max-w-4xl"
-      >
-        <div className="absolute -inset-1 rounded-xl bg-gradient-to-r from-cyan-400/50 to-primary/50 opacity-25 blur-xl" />
-        <div className="relative h-full w-full rounded-lg border bg-muted/40 p-4 shadow-xl">
-          <div className="flex h-72 items-center justify-center rounded-md bg-background/50">
-            <p className="text-muted-foreground">Product Screenshot Placeholder</p>
+        <motion.div
+          variants={itemVariants}
+          className="mt-12 w-full max-w-4xl overflow-hidden rounded-lg border-2 border-accent/30 bg-gradient-to-br from-accent/10 to-primary/10 shadow-2xl"
+        >
+          <div className="aspect-video flex items-center justify-center p-8">
+            <div className="text-center">
+              <Bot className="mx-auto h-20 w-20 text-accent" />
+              <p className="mt-4 text-sm text-muted-foreground">
+                AI-Powered Finance Dashboard Preview
+              </p>
+            </div>
           </div>
-        </div>
+        </motion.div>
       </motion.div>
     </Section>
   );
 };
 
 // 3. Features Section
-const features = [
-  {
-    icon: <Bot className="h-8 w-8 text-primary" />,
-    title: "AI-Powered Assistant",
-    description: "Just type or speak. Our AI understands natural language to categorize transactions instantly.",
-  },
-  {
-    icon: <TrendingUp className="h-8 w-8 text-primary" />,
-    title: "Smart Insights",
-    description: "Discover spending patterns and get actionable insights to optimize your business finances.",
-  },
-  {
-    icon: <Zap className="h-8 w-8 text-primary" />,
-    title: "Effortless Tracking",
-    description: "Connect your accounts and let the app automatically sync and manage everything for you.",
-  },
-];
+const FeaturesSection = () => {
+  const features = [
+    {
+      icon: Bot,
+      title: "AI Assistant",
+      description:
+        "Describe transactions in natural language. Our AI automatically categorizes, tags, and organizes your financial data with precision.",
+    },
+    {
+      icon: TrendingUp,
+      title: "Smart Insights",
+      description:
+        "Get actionable financial insights and trends. Identify spending patterns, forecast cash flow, and make data-driven decisions effortlessly.",
+    },
+    {
+      icon: Zap,
+      title: "Effortless Tracking",
+      description:
+        "No more manual entry. AI-powered automation handles receipts, invoices, and transactions, saving you hours every week.",
+    },
+  ];
 
-const FeaturesSection = () => (
-  <Section id="features" className="bg-muted/40">
-    <div className="text-center">
-      <h2 className="text-3xl font-bold tracking-tight md:text-4xl">Why You'll Love AI-Fi Tracker</h2>
-      <p className="mt-2 text-lg text-muted-foreground">Everything you need, nothing you don't.</p>
-    </div>
-    <div className="mt-12 grid gap-8 md:grid-cols-3">
-      {features.map((feature, i) => (
-        <motion.div
-          key={feature.title}
-          initial={{ opacity: 0, y: 50 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.5 }}
-          transition={{ duration: 0.5, delay: i * 0.15 }}
-          whileHover={{ scale: 1.03, transition: { duration: 0.2 } }}
-        >
-          <Card className="h-full text-center">
-            <CardHeader>
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-                {feature.icon}
-              </div>
-              <CardTitle>{feature.title}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <CardDescription>{feature.description}</CardDescription>
-            </CardContent>
-          </Card>
-        </motion.div>
-      ))}
-    </div>
-  </Section>
-);
+  return (
+    <Section className="bg-muted/30">
+      <div className="text-center">
+        <h2 className="text-3xl font-bold md:text-4xl">
+          Why Choose <span className="text-accent">AI-Fi Tracker</span>?
+        </h2>
+        <p className="mt-4 text-lg text-muted-foreground">
+          Powerful features designed to transform how you manage your finances.
+        </p>
+      </div>
+
+      <div className="mt-12 grid gap-8 md:grid-cols-3">
+        {features.map((feature, index) => (
+          <motion.div
+            key={feature.title}
+            initial={{ opacity: 0, y: 50 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: index * 0.1, duration: 0.5 }}
+            whileHover={{ scale: 1.03 }}
+          >
+            <Card className="h-full border-accent/20 hover:border-accent/50 transition-colors">
+              <CardHeader>
+                <feature.icon className="h-12 w-12 text-accent mb-4" />
+                <CardTitle>{feature.title}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CardDescription className="text-base">
+                  {feature.description}
+                </CardDescription>
+              </CardContent>
+            </Card>
+          </motion.div>
+        ))}
+      </div>
+    </Section>
+  );
+};
 
 // 4. Social Proof / Testimonials Section
-const testimonials = [
-  {
-    name: "Alex Johnson",
-    title: "Freelance Designer",
-    quote: "AI-Fi Tracker has been a game-changer. I've saved hours every week. It's like having a personal bookkeeper who's always on call.",
-    avatar: "https://i.pravatar.cc/150?img=12",
-  },
-  {
-    name: "Samantha Lee",
-    title: "E-commerce Store Owner",
-    quote: "Finally, a finance app that gets it. The AI categorization is incredibly accurate and the insights have helped me boost my profitability.",
-    avatar: "https://i.pravatar.cc/150?img=45",
-  },
-];
+const SocialProofSection = () => {
+  const testimonials = [
+    {
+      name: "Sarah Mitchell",
+      role: "Small Business Owner",
+      quote:
+        "AI-Fi Tracker has completely transformed how I handle my business finances. What used to take hours now takes minutes.",
+      initials: "SM",
+    },
+    {
+      name: "David Chen",
+      role: "Freelance Consultant",
+      quote:
+        "The AI assistant understands exactly what I need. It's like having a personal accountant available 24/7.",
+      initials: "DC",
+    },
+  ];
 
-const SocialProofSection = () => (
-  <Section id="testimonials">
-    <div className="text-center">
-      <h2 className="text-3xl font-bold tracking-tight md:text-4xl">Trusted by Professionals</h2>
-      <p className="mt-2 text-lg text-muted-foreground">See what others are saying about us.</p>
-    </div>
-    <div className="mt-12 grid grid-cols-1 gap-8 md:grid-cols-2">
-      {testimonials.map((testimonial, i) => (
-        <motion.div
-          key={testimonial.name}
-          initial={{ opacity: 0, y: 50 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.5 }}
-          transition={{ duration: 0.5, delay: i * 0.2 }}
-          whileHover={{ scale: 1.03, transition: { duration: 0.2 } }}
-        >
-          <Card className="flex h-full flex-col">
-            <CardContent className="flex-grow p-6">
-              <p className="text-muted-foreground">"{testimonial.quote}"</p>
-            </CardContent>
-            <CardHeader className="flex flex-row items-center gap-4">
-              <Avatar>
-                <AvatarImage src={testimonial.avatar} alt={testimonial.name} />
-                <AvatarFallback>{testimonial.name.charAt(0)}</AvatarFallback>
-              </Avatar>
-              <div>
-                <p className="font-semibold">{testimonial.name}</p>
-                <p className="text-sm text-muted-foreground">{testimonial.title}</p>
-              </div>
-            </CardHeader>
-          </Card>
-        </motion.div>
-      ))}
-    </div>
-  </Section>
-);
+  return (
+    <Section>
+      <div className="text-center">
+        <h2 className="text-3xl font-bold md:text-4xl">
+          Trusted by Finance Professionals
+        </h2>
+        <p className="mt-4 text-lg text-muted-foreground">
+          Join thousands who've simplified their financial workflows.
+        </p>
+      </div>
 
-// 5. Final Call to Action (CTA) Section
-const FinalCTASection = () => (
-  <Section className="bg-muted/40">
-    <motion.div
-      initial={{ opacity: 0, y: 50 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.5 }}
-      transition={{ duration: 0.7 }}
-      className="mx-auto max-w-3xl text-center"
-    >
-      <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
-        Ready to Take Control of Your Finances?
-      </h2>
-      <p className="mt-4 text-lg text-muted-foreground">
-        Join hundreds of businesses simplifying their financial management with AI.
-      </p>
-      <Button size="lg" className="mt-8" asChild>
-        <Link to="/auth">Sign Up Now</Link>
-      </Button>
-    </motion.div>
-  </Section>
-);
+      <div className="mt-12 grid gap-8 md:grid-cols-2">
+        {testimonials.map((testimonial, index) => (
+          <motion.div
+            key={testimonial.name}
+            initial={{ opacity: 0, y: 50 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: index * 0.15, duration: 0.5 }}
+          >
+            <Card className="h-full">
+              <CardHeader>
+                <div className="flex items-center space-x-4">
+                  <Avatar>
+                    <AvatarFallback className="bg-accent text-accent-foreground">
+                      {testimonial.initials}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <CardTitle className="text-lg">
+                      {testimonial.name}
+                    </CardTitle>
+                    <CardDescription>{testimonial.role}</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground italic">
+                  "{testimonial.quote}"
+                </p>
+              </CardContent>
+            </Card>
+          </motion.div>
+        ))}
+      </div>
+    </Section>
+  );
+};
+
+// 5. Final Call-to-Action
+const FinalCTASection = () => {
+  return (
+    <Section className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground">
+      <motion.div
+        initial={{ opacity: 0, y: 30 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.6 }}
+        className="text-center"
+      >
+        <h2 className="text-3xl font-bold md:text-5xl">
+          Ready to take control of your finances?
+        </h2>
+        <p className="mt-4 text-lg text-primary-foreground/90 md:text-xl">
+          Start tracking smarter, not harder. Join AI-Fi Tracker today.
+        </p>
+        <Button size="lg" variant="secondary" asChild className="mt-8">
+          <Link to="/auth">
+            Sign Up Now
+            <ArrowRight className="ml-2" />
+          </Link>
+        </Button>
+      </motion.div>
+    </Section>
+  );
+};
 
 // 6. Footer
-const Footer = () => (
-  <footer className="border-t">
-    <div className="container flex flex-col items-center justify-between gap-4 py-6 md:flex-row">
-      <p className="text-sm text-muted-foreground">
-        © {new Date().getFullYear()} AI-Fi Tracker. All rights reserved.
-      </p>
-      <nav className="flex gap-4">
-        <Link to="/privacy" className="text-sm text-muted-foreground hover:text-primary">
-          Privacy Policy
-        </Link>
-        <Link to="/terms" className="text-sm text-muted-foreground hover:text-primary">
-          Terms of Service
-        </Link>
-      </nav>
-    </div>
-  </footer>
-);
+const Footer = () => {
+  return (
+    <footer className="border-t bg-muted/30">
+      <div className="container py-8">
+        <div className="flex flex-col items-center justify-between space-y-4 md:flex-row md:space-y-0">
+          <div className="flex items-center space-x-2">
+            <Bot className="h-5 w-5 text-primary" />
+            <span className="font-bold">AI-Fi Tracker</span>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            © {new Date().getFullYear()} AI-Fi Tracker. All rights reserved.
+          </p>
+          <nav className="flex space-x-4 text-sm">
+            <Link
+              to="/privacy-policy"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Privacy Policy
+            </Link>
+            <Link
+              to="/terms-of-service"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Terms
+            </Link>
+          </nav>
+        </div>
+      </div>
+    </footer>
+  );
+};
