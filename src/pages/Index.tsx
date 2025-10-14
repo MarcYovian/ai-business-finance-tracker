@@ -1,390 +1,267 @@
+
+import { motion } from "framer-motion";
+import { Link } from "react-router-dom";
 import { ArrowRight, Bot, TrendingUp, Zap } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import { motion, useScroll, useTransform } from "framer-motion";
-import { useRef } from "react";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { cn } from "@/lib/utils";
 
-const Index = () => {
-  const navigate = useNavigate();
-  
-  const heroRef = useRef<HTMLDivElement>(null);
-  const featuresRef = useRef<HTMLDivElement>(null);
-  const testimonialsRef = useRef<HTMLDivElement>(null);
-  const ctaRef = useRef<HTMLDivElement>(null);
+// Helper component for consistent section styling
+const Section = ({ children, className, ...props }: React.HTMLAttributes<HTMLElement>) => (
+  <section className={cn("container py-16 md:py-24", className)} {...props}>
+    {children}
+  </section>
+);
 
-  // Hero section scroll animations
-  const { scrollYProgress: heroScrollYProgress } = useScroll({
-    target: heroRef,
-    offset: ["start start", "end start"]
-  });
-  const heroImageY = useTransform(heroScrollYProgress, [0, 1], ["0%", "30%"]);
+// Main Page Component
+export default function IndexPage() {
+  return (
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
+      <Header />
+      <main className="flex-grow">
+        <HeroSection />
+        <FeaturesSection />
+        <SocialProofSection />
+        <FinalCTASection />
+      </main>
+      <Footer />
+    </div>
+  );
+}
 
-  // Features section scroll animations
-  const { scrollYProgress: featuresScrollYProgress } = useScroll({
-    target: featuresRef,
-    offset: ["start end", "end end"]
-  });
-  const card1Opacity = useTransform(featuresScrollYProgress, [0, 0.3], [0, 1]);
-  const card1Y = useTransform(featuresScrollYProgress, [0, 0.3], ["50px", "0px"]);
-  const card2Opacity = useTransform(featuresScrollYProgress, [0.1, 0.4], [0, 1]);
-  const card2Y = useTransform(featuresScrollYProgress, [0.1, 0.4], ["50px", "0px"]);
-  const card3Opacity = useTransform(featuresScrollYProgress, [0.2, 0.5], [0, 1]);
-  const card3Y = useTransform(featuresScrollYProgress, [0.2, 0.5], ["50px", "0px"]);
+// 1. Header / Navigation Bar
+const Header = () => (
+  <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur-lg">
+    <div className="container flex h-14 items-center">
+      <Link to="/" className="mr-6 flex items-center space-x-2">
+        <Bot className="h-6 w-6 text-primary" />
+        <span className="font-bold">AI-Fi Tracker</span>
+      </Link>
+      <div className="flex flex-1 items-center justify-end space-x-4">
+        <nav className="flex items-center space-x-2">
+          <Button variant="ghost" asChild>
+            <Link to="/auth">Login</Link>
+          </Button>
+          <Button asChild>
+            <Link to="/auth">Sign Up</Link>
+          </Button>
+        </nav>
+      </div>
+    </div>
+  </header>
+);
 
-  // Testimonials section scroll animations
-  const { scrollYProgress: testimonialsScrollYProgress } = useScroll({
-    target: testimonialsRef,
-    offset: ["start end", "end start"]
-  });
-  const leftCardX = useTransform(testimonialsScrollYProgress, [0, 0.5], ["-50px", "0px"]);
-  const leftCardOpacity = useTransform(testimonialsScrollYProgress, [0, 0.5], [0, 1]);
-  const rightCardX = useTransform(testimonialsScrollYProgress, [0, 0.5], ["50px", "0px"]);
-  const rightCardOpacity = useTransform(testimonialsScrollYProgress, [0, 0.5], [0, 1]);
+// 2. Hero Section
+const HeroSection = () => {
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: { staggerChildren: 0.2, delayChildren: 0.1 },
+    },
+  };
 
-  // CTA section scroll animations
-  const { scrollYProgress: ctaScrollYProgress } = useScroll({
-    target: ctaRef,
-    offset: ["start end", "end start"]
-  });
-  const ctaBackground = useTransform(ctaScrollYProgress, [0, 1], ["hsl(210 40% 96.1%)", "hsl(202 70% 8%)"]);
+  const itemVariants = {
+    hidden: { y: 20, opacity: 0 },
+    visible: { y: 0, opacity: 1, transition: { duration: 0.5 } },
+  };
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-16 items-center">
-          <div className="mr-4 flex items-center">
-            <Bot className="mr-2 h-6 w-6 text-primary" />
-            <span className="font-bold text-lg">AI-Fi Tracker</span>
-          </div>
-          <div className="flex flex-1 items-center justify-end space-x-4">
-            <nav className="flex items-center space-x-4">
-              <Button 
-                variant="ghost" 
-                onClick={() => navigate("/auth")}
-                className="text-foreground hover:bg-accent"
-              >
-                Login
-              </Button>
-              <motion.div
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                <Button 
-                  onClick={() => navigate("/auth")}
-                  className="bg-primary text-primary-foreground hover:bg-primary/90"
-                >
-                  Sign Up
-                </Button>
-              </motion.div>
-            </nav>
+    <Section className="text-center">
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+        className="flex flex-col items-center"
+      >
+        <motion.h1
+          variants={itemVariants}
+          className="text-4xl font-extrabold tracking-tight md:text-6xl"
+        >
+          Intelligent Finance Tracking,
+          <br />
+          <span className="bg-gradient-to-r from-primary to-cyan-400 bg-clip-text text-transparent">
+            Simplified by AI.
+          </span>
+        </motion.h1>
+        <motion.p
+          variants={itemVariants}
+          className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground md:text-xl"
+        >
+          Stop wrestling with spreadsheets. Just describe your transactions in plain English and let our AI handle the rest. Get insights, save time, and take control of your business finances.
+        </motion.p>
+        <motion.div variants={itemVariants} className="mt-8">
+          <Button size="lg" asChild>
+            <Link to="/auth">
+              Get Started for Free
+              <ArrowRight className="ml-2 h-5 w-5" />
+            </Link>
+          </Button>
+        </motion.div>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 50, scale: 0.9 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.8, delay: 0.8, ease: "easeOut" }}
+        className="relative mx-auto mt-12 max-w-4xl"
+      >
+        <div className="absolute -inset-1 rounded-xl bg-gradient-to-r from-cyan-400/50 to-primary/50 opacity-25 blur-xl" />
+        <div className="relative h-full w-full rounded-lg border bg-muted/40 p-4 shadow-xl">
+          <div className="flex h-72 items-center justify-center rounded-md bg-background/50">
+            <p className="text-muted-foreground">Product Screenshot Placeholder</p>
           </div>
         </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="flex-1">
-        {/* Hero Section */}
-        <section ref={heroRef} className="py-12 md:py-20 lg:py-28">
-          <div className="container">
-            <div className="flex flex-col items-center text-center">
-              <motion.h1 
-                className="scroll-m-20 text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight max-w-3xl"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8, ease: "easeOut" }}
-              >
-                Intelligent Finance Tracking, Simplified by AI.
-              </motion.h1>
-              <motion.p 
-                className="mx-auto mt-6 max-w-2xl text-lg md:text-xl text-muted-foreground"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8, delay: 0.1, ease: "easeOut" }}
-              >
-                Stop wrestling with spreadsheets. Just describe your transactions
-                in plain English and let our AI handle the rest. Get insights,
-                save time, and take control of your business finances.
-              </motion.p>
-              <motion.div 
-                className="mt-8"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
-              >
-                <motion.div
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <Button
-                    size="lg"
-                    className="bg-primary text-primary-foreground hover:bg-primary/90 px-8 py-6 text-lg gap-2"
-                    onClick={() => navigate("/auth")}
-                  >
-                    Get Started for Free <ArrowRight className="h-5 w-5" />
-                  </Button>
-                </motion.div>
-              </motion.div>
-              <motion.div 
-                className="mt-12 w-full max-w-4xl"
-                style={{ y: heroImageY }}
-              >
-                <div className="relative">
-                  <div className="absolute -inset-2 bg-accent rounded-xl blur-lg opacity-30"></div>
-                  <div className="relative rounded-xl border border-border overflow-hidden bg-muted p-4">
-                    <div className="aspect-video bg-gradient-to-br from-muted to-muted/70 rounded-lg flex items-center justify-center">
-                      <div className="text-center">
-                        <div className="mx-auto h-16 w-16 flex items-center justify-center rounded-full bg-accent mb-4">
-                          <Bot className="h-8 w-8 text-accent-foreground" />
-                        </div>
-                        <p className="text-muted-foreground">AI-Fi Tracker Dashboard Preview</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            </div>
-          </div>
-        </section>
-
-        {/* Features Section */}
-        <section ref={featuresRef} className="py-16 md:py-24 bg-muted/30">
-          <div className="container">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5 }}
-            >
-              <h2 className="mb-12 text-center text-3xl md:text-4xl font-bold tracking-tight">
-                Why You'll Love AI-Fi Tracker
-              </h2>
-            </motion.div>
-            <div className="grid gap-8 md:grid-cols-3">
-              <motion.div
-                style={{ opacity: card1Opacity, y: card1Y }}
-                className="h-full"
-              >
-                <Card className="h-full border border-border bg-card hover:shadow-lg transition-shadow duration-300">
-                  <CardHeader className="items-center">
-                    <motion.div 
-                      className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground"
-                      whileHover={{ scale: 1.1 }}
-                    >
-                      <Bot className="h-6 w-6" />
-                    </motion.div>
-                    <CardTitle>AI Assistant</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <CardDescription className="text-center">
-                      Describe transactions in natural language. Our AI parses,
-                      categorizes, and records them for you.
-                    </CardDescription>
-                  </CardContent>
-                </Card>
-              </motion.div>
-              <motion.div
-                style={{ opacity: card2Opacity, y: card2Y }}
-                className="h-full"
-              >
-                <Card className="h-full border border-border bg-card hover:shadow-lg transition-shadow duration-300">
-                  <CardHeader className="items-center">
-                    <motion.div 
-                      className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground"
-                      whileHover={{ scale: 1.1 }}
-                    >
-                      <TrendingUp className="h-6 w-6" />
-                    </motion.div>
-                    <CardTitle>Smart Insights</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <CardDescription className="text-center">
-                      Gain a deeper understanding of your spending habits and
-                      financial health with AI-powered analytics.
-                    </CardDescription>
-                  </CardContent>
-                </Card>
-              </motion.div>
-              <motion.div
-                style={{ opacity: card3Opacity, y: card3Y }}
-                className="h-full"
-              >
-                <Card className="h-full border border-border bg-card hover:shadow-lg transition-shadow duration-300">
-                  <CardHeader className="items-center">
-                    <motion.div 
-                      className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground"
-                      whileHover={{ scale: 1.1 }}
-                    >
-                      <Zap className="h-6 w-6" />
-                    </motion.div>
-                    <CardTitle>Effortless Tracking</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <CardDescription className="text-center">
-                      Quickly add expenses and income on the go. Spend less time
-                      on bookkeeping and more on your business.
-                    </CardDescription>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            </div>
-          </div>
-        </section>
-
-        {/* Social Proof / Testimonials Section */}
-        <section ref={testimonialsRef} className="py-16 md:py-24">
-          <div className="container">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5 }}
-            >
-              <h2 className="mb-12 text-center text-3xl md:text-4xl font-bold tracking-tight">
-                Loved by Founders Everywhere
-              </h2>
-            </motion.div>
-            <div className="grid gap-8 md:grid-cols-2">
-              <motion.div
-                style={{ x: leftCardX, opacity: leftCardOpacity }}
-              >
-                <Card className="h-full border border-border bg-card">
-                  <CardContent className="pt-6">
-                    <blockquote className="italic text-muted-foreground">
-                      "AI-Fi Tracker has revolutionized how I manage my startup's
-                      finances. It's like having a personal bookkeeper available
-                      24/7. I can't imagine going back to spreadsheets."
-                    </blockquote>
-                  </CardContent>
-                  <CardHeader>
-                    <div className="flex items-center gap-4">
-                      <Avatar>
-                        <AvatarImage
-                          src="https://i.pravatar.cc/150?u=a042581f4e29026024d"
-                          alt="Jane Doe"
-                        />
-                        <AvatarFallback>JD</AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <CardTitle>Jane Doe</CardTitle>
-                        <CardDescription>Founder of TechCorp</CardDescription>
-                      </div>
-                    </div>
-                  </CardHeader>
-                </Card>
-              </motion.div>
-              <motion.div
-                style={{ x: rightCardX, opacity: rightCardOpacity }}
-              >
-                <Card className="h-full border border-border bg-card">
-                  <CardContent className="pt-6">
-                    <blockquote className="italic text-muted-foreground">
-                      "The ability to just write down what I spent money on and
-                      have it automatically categorized is a game-changer. It
-                      saves me hours every month."
-                    </blockquote>
-                  </CardContent>
-                  <CardHeader>
-                    <div className="flex items-center gap-4">
-                      <Avatar>
-                        <AvatarImage
-                          src="https://i.pravatar.cc/150?u=a042581f4e29026704d"
-                          alt="John Smith"
-                        />
-                        <AvatarFallback>JS</AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <CardTitle>John Smith</CardTitle>
-                        <CardDescription>CEO of Innovate LLC</CardDescription>
-                      </div>
-                    </div>
-                  </CardHeader>
-                </Card>
-              </motion.div>
-            </div>
-          </div>
-        </section>
-
-        {/* Final CTA Section */}
-        <section ref={ctaRef} className="py-16 md:py-24">
-          <motion.div 
-            style={{ backgroundColor: ctaBackground }}
-            className="transition-colors duration-300"
-          >
-            <div className="container">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5 }}
-                className="text-center"
-              >
-                <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">
-                  Ready to take control of your finances?
-                </h2>
-                <p className="mt-4 max-w-2xl mx-auto text-muted-foreground">
-                  Start your free trial today. No credit card required.
-                </p>
-                <motion.div
-                  className="mt-8"
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <Button
-                    size="lg"
-                    className="bg-primary text-primary-foreground hover:bg-primary/90 px-8 py-6 text-lg"
-                    onClick={() => navigate("/auth")}
-                  >
-                    Sign Up Now
-                  </Button>
-                </motion.div>
-              </motion.div>
-            </div>
-          </motion.div>
-        </section>
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t bg-background">
-        <div className="container py-10 md:py-6">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="flex flex-col items-center gap-2">
-              <div className="flex items-center gap-2">
-                <Bot className="h-5 w-5 text-primary" />
-                <p className="text-sm font-medium">AI-Fi Tracker</p>
-              </div>
-              <p className="text-center text-sm text-muted-foreground md:text-left">
-                © 2025 AI-Fi Tracker. All rights reserved.
-              </p>
-            </div>
-            <div className="flex items-center gap-6 text-sm text-muted-foreground">
-              <a 
-                href="/privacy-policy" 
-                className="hover:text-foreground transition-colors"
-              >
-                Privacy Policy
-              </a>
-              <a 
-                href="/terms-of-service" 
-                className="hover:text-foreground transition-colors"
-              >
-                Terms of Service
-              </a>
-            </div>
-          </div>
-        </div>
-      </footer>
-    </div>
+      </motion.div>
+    </Section>
   );
 };
 
-export default Index;
+// 3. Features Section
+const features = [
+  {
+    icon: <Bot className="h-8 w-8 text-primary" />,
+    title: "AI-Powered Assistant",
+    description: "Just type or speak. Our AI understands natural language to categorize transactions instantly.",
+  },
+  {
+    icon: <TrendingUp className="h-8 w-8 text-primary" />,
+    title: "Smart Insights",
+    description: "Discover spending patterns and get actionable insights to optimize your business finances.",
+  },
+  {
+    icon: <Zap className="h-8 w-8 text-primary" />,
+    title: "Effortless Tracking",
+    description: "Connect your accounts and let the app automatically sync and manage everything for you.",
+  },
+];
+
+const FeaturesSection = () => (
+  <Section id="features" className="bg-muted/40">
+    <div className="text-center">
+      <h2 className="text-3xl font-bold tracking-tight md:text-4xl">Why You'll Love AI-Fi Tracker</h2>
+      <p className="mt-2 text-lg text-muted-foreground">Everything you need, nothing you don't.</p>
+    </div>
+    <div className="mt-12 grid gap-8 md:grid-cols-3">
+      {features.map((feature, i) => (
+        <motion.div
+          key={feature.title}
+          initial={{ opacity: 0, y: 50 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.5 }}
+          transition={{ duration: 0.5, delay: i * 0.15 }}
+          whileHover={{ scale: 1.03, transition: { duration: 0.2 } }}
+        >
+          <Card className="h-full text-center">
+            <CardHeader>
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+                {feature.icon}
+              </div>
+              <CardTitle>{feature.title}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <CardDescription>{feature.description}</CardDescription>
+            </CardContent>
+          </Card>
+        </motion.div>
+      ))}
+    </div>
+  </Section>
+);
+
+// 4. Social Proof / Testimonials Section
+const testimonials = [
+  {
+    name: "Alex Johnson",
+    title: "Freelance Designer",
+    quote: "AI-Fi Tracker has been a game-changer. I've saved hours every week. It's like having a personal bookkeeper who's always on call.",
+    avatar: "https://i.pravatar.cc/150?img=12",
+  },
+  {
+    name: "Samantha Lee",
+    title: "E-commerce Store Owner",
+    quote: "Finally, a finance app that gets it. The AI categorization is incredibly accurate and the insights have helped me boost my profitability.",
+    avatar: "https://i.pravatar.cc/150?img=45",
+  },
+];
+
+const SocialProofSection = () => (
+  <Section id="testimonials">
+    <div className="text-center">
+      <h2 className="text-3xl font-bold tracking-tight md:text-4xl">Trusted by Professionals</h2>
+      <p className="mt-2 text-lg text-muted-foreground">See what others are saying about us.</p>
+    </div>
+    <div className="mt-12 grid grid-cols-1 gap-8 md:grid-cols-2">
+      {testimonials.map((testimonial, i) => (
+        <motion.div
+          key={testimonial.name}
+          initial={{ opacity: 0, y: 50 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.5 }}
+          transition={{ duration: 0.5, delay: i * 0.2 }}
+          whileHover={{ scale: 1.03, transition: { duration: 0.2 } }}
+        >
+          <Card className="flex h-full flex-col">
+            <CardContent className="flex-grow p-6">
+              <p className="text-muted-foreground">"{testimonial.quote}"</p>
+            </CardContent>
+            <CardHeader className="flex flex-row items-center gap-4">
+              <Avatar>
+                <AvatarImage src={testimonial.avatar} alt={testimonial.name} />
+                <AvatarFallback>{testimonial.name.charAt(0)}</AvatarFallback>
+              </Avatar>
+              <div>
+                <p className="font-semibold">{testimonial.name}</p>
+                <p className="text-sm text-muted-foreground">{testimonial.title}</p>
+              </div>
+            </CardHeader>
+          </Card>
+        </motion.div>
+      ))}
+    </div>
+  </Section>
+);
+
+// 5. Final Call to Action (CTA) Section
+const FinalCTASection = () => (
+  <Section className="bg-muted/40">
+    <motion.div
+      initial={{ opacity: 0, y: 50 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.5 }}
+      transition={{ duration: 0.7 }}
+      className="mx-auto max-w-3xl text-center"
+    >
+      <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
+        Ready to Take Control of Your Finances?
+      </h2>
+      <p className="mt-4 text-lg text-muted-foreground">
+        Join hundreds of businesses simplifying their financial management with AI.
+      </p>
+      <Button size="lg" className="mt-8" asChild>
+        <Link to="/auth">Sign Up Now</Link>
+      </Button>
+    </motion.div>
+  </Section>
+);
+
+// 6. Footer
+const Footer = () => (
+  <footer className="border-t">
+    <div className="container flex flex-col items-center justify-between gap-4 py-6 md:flex-row">
+      <p className="text-sm text-muted-foreground">
+        © {new Date().getFullYear()} AI-Fi Tracker. All rights reserved.
+      </p>
+      <nav className="flex gap-4">
+        <Link to="/privacy" className="text-sm text-muted-foreground hover:text-primary">
+          Privacy Policy
+        </Link>
+        <Link to="/terms" className="text-sm text-muted-foreground hover:text-primary">
+          Terms of Service
+        </Link>
+      </nav>
+    </div>
+  </footer>
+);
