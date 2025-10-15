@@ -1,5 +1,5 @@
-import { formatCurrency } from "./currency";
 import { Category, FundSource, Transaction, User } from "@/types/finance";
+import { formatCurrency } from "./currency";
 import { supabase } from "./supabase";
 
 const STORAGE_KEYS = {
@@ -47,16 +47,16 @@ export const userStorage = {
 
 // Category operations
 export const categoryStorage = {
-  getAll: async (userId: string, type?: 'income' | 'expense'): Promise<Category[]> => {
-    let query = supabase
-      .from("categories")
-      .select("*")
-      .eq("user_id", userId);
-    
+  getAll: async (
+    userId: string,
+    type?: "income" | "expense"
+  ): Promise<Category[]> => {
+    let query = supabase.from("categories").select("*").eq("user_id", userId);
+
     if (type) {
       query = query.eq("type", type);
     }
-    
+
     const { data, error } = await query;
     if (error) throw error;
 
@@ -72,7 +72,12 @@ export const categoryStorage = {
     );
   },
 
-  create: async (name: string, userId: string, type: 'income' | 'expense', parentId: string | null = null): Promise<Category> => {
+  create: async (
+    name: string,
+    userId: string,
+    type: "income" | "expense",
+    parentId: string | null = null
+  ): Promise<Category> => {
     const { data, error } = await supabase
       .from("categories")
       .insert([{ name, user_id: userId, type, parent_id: parentId }])
@@ -94,8 +99,9 @@ export const categoryStorage = {
     const updatesForDb: any = {};
     if (updates.name) updatesForDb.name = updates.name;
     if (updates.type) updatesForDb.type = updates.type;
-    if (updates.parentId !== undefined) updatesForDb.parent_id = updates.parentId;
-    
+    if (updates.parentId !== undefined)
+      updatesForDb.parent_id = updates.parentId;
+
     const { data, error } = await supabase
       .from("categories")
       .update(updatesForDb)
@@ -103,7 +109,7 @@ export const categoryStorage = {
       .select()
       .single();
     if (error) throw error;
-    
+
     return {
       id: data.id,
       name: data.name,
@@ -259,19 +265,22 @@ export const transactionStorage = {
     transaction: Omit<Transaction, "id" | "createdAt">
   ): Promise<Transaction> => {
     // Check for sufficient funds for expense transactions
-    if ((transaction.type === 'expense' || transaction.type === 'transfer') && transaction.sourceFundId) {
+    if (
+      (transaction.type === "expense" || transaction.type === "transfer") &&
+      transaction.sourceFundId
+    ) {
       const { data: sourceFund, error: fundError } = await supabase
-        .from('fund_sources')
-        .select('balance')
-        .eq('id', transaction.sourceFundId)
+        .from("fund_sources")
+        .select("balance")
+        .eq("id", transaction.sourceFundId)
         .single();
 
       if (fundError || !sourceFund) {
-        throw new Error('Source fund not found.');
+        throw new Error("Source fund not found.");
       }
 
       if (sourceFund.balance < transaction.amount) {
-        throw new Error('Insufficient funds in the source account.');
+        throw new Error("Insufficient funds in the source account.");
       }
     }
 
@@ -309,23 +318,25 @@ export const transactionStorage = {
   },
 
   update: async (id: string, updates: Partial<Transaction>): Promise<void> => {
-    const updatesForDb: { [key: string]: any } = {};
-    if (updates.description) updatesForDb.description = updates.description;
-    if (updates.amount) updatesForDb.amount = updates.amount;
-    if (updates.type) updatesForDb.type = updates.type;
-    if (updates.transactionDate)
-      updatesForDb.transaction_date = updates.transactionDate;
-    if (updates.categoryId) updatesForDb.category_id = updates.categoryId;
-    if (updates.sourceFundId)
-      updatesForDb.source_fund_id = updates.sourceFundId;
-    if (updates.destinationFundId)
-      updatesForDb.destination_fund_id = updates.destinationFundId;
+    // Memanggil RPC function yang baru dibuat
+    const { data, error } = await supabase.rpc(
+      "update_transaction_and_update_balance",
+      {
+        p_id: id,
+        p_description: updates.description,
+        p_amount: updates.amount,
+        p_type: updates.type,
+        p_transaction_date: updates.transactionDate,
+        p_category_id: updates.categoryId,
+        p_source_fund_id: updates.sourceFundId || null,
+        p_destination_fund_id: updates.destinationFundId || null,
+      }
+    );
 
-    const { error } = await supabase
-      .from("transactions")
-      .update(updatesForDb)
-      .eq("id", id);
-    if (error) throw error;
+    if (error) {
+      console.error("Error updating transaction:", error);
+      throw error;
+    }
   },
 
   delete: async (id: string): Promise<void> => {
