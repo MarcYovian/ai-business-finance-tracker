@@ -1,16 +1,37 @@
-import { useState, useEffect } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from '@/components/ui/select';
-import { Transaction, TransactionType, Category, FundSource } from '@/types/finance';
-import { parseCurrency } from '@/lib/currency';
-import { toast } from '@/hooks/use-toast';
-import { useCategories } from '@/hooks/useCategories';
-import { useFundSources } from '@/hooks/useFundSources';
-import { useAddTransaction, useUpdateTransaction } from '@/hooks/useTransactions';
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "@/hooks/use-toast";
+import { useCategories } from "@/hooks/useCategories";
+import { useFundSources } from "@/hooks/useFundSources";
+import {
+  useAddTransaction,
+  useUpdateTransaction,
+} from "@/hooks/useTransactions";
+import { formatCurrencyForInput, parseCurrency } from "@/lib/currency";
+import {
+  Category,
+  FundSource,
+  Transaction,
+  TransactionType,
+} from "@/types/finance";
+import { useEffect, useState } from "react";
 
 interface TransactionDialogProps {
   open: boolean;
@@ -18,19 +39,28 @@ interface TransactionDialogProps {
   transaction?: Transaction | null;
 }
 
-export const TransactionDialog = ({ open, onClose, transaction }: TransactionDialogProps) => {
+export const TransactionDialog = ({
+  open,
+  onClose,
+  transaction,
+}: TransactionDialogProps) => {
   const { user } = useAuth();
-  const [description, setDescription] = useState('');
-  const [amount, setAmount] = useState('');
-  const [type, setType] = useState<TransactionType>('expense');
-  const [date, setDate] = useState('');
+  const [description, setDescription] = useState("");
+  const [amount, setAmount] = useState("");
+  const [type, setType] = useState<TransactionType>("expense");
+  const [date, setDate] = useState("");
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [sourceFundId, setSourceFundId] = useState<string | null>(null);
-  const [destinationFundId, setDestinationFundId] = useState<string | null>(null);
+  const [destinationFundId, setDestinationFundId] = useState<string | null>(
+    null
+  );
 
   // Filter categories based on transaction type
-  const { data: categories = [] } = useCategories(user?.id || '', type === 'transfer' ? undefined : type);
-  const { data: fundSources = [] } = useFundSources(user?.id || '');
+  const { data: categories = [] } = useCategories(
+    user?.id || "",
+    type === "transfer" ? undefined : type
+  );
+  const { data: fundSources = [] } = useFundSources(user?.id || "");
 
   const addTransactionMutation = useAddTransaction();
   const updateTransactionMutation = useUpdateTransaction();
@@ -40,15 +70,15 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
       setDescription(transaction.description);
       setAmount((transaction.amount / 100).toString());
       setType(transaction.type);
-      setDate(transaction.transactionDate.split('T')[0]);
+      setDate(transaction.transactionDate.split("T")[0]);
       setCategoryId(transaction.categoryId || null);
       setSourceFundId(transaction.sourceFundId || null);
       setDestinationFundId(transaction.destinationFundId || null);
     } else {
-      setDescription('');
-      setAmount('');
-      setType('expense');
-      setDate(new Date().toISOString().split('T')[0]);
+      setDescription("");
+      setAmount("");
+      setType("expense");
+      setDate(new Date().toISOString().split("T")[0]);
       setCategoryId(null);
       setSourceFundId(null);
       setDestinationFundId(null);
@@ -56,16 +86,23 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
   }, [transaction]);
 
   // Group categories by parent for hierarchical display
-  const parentCategories = categories.filter(cat => !cat.parentId);
-  const subCategories = categories.filter(cat => cat.parentId);
-  const getSubCategories = (parentId: string) => subCategories.filter(sub => sub.parentId === parentId);
+  const parentCategories = categories.filter((cat) => !cat.parentId);
+  const subCategories = categories.filter((cat) => cat.parentId);
+  const getSubCategories = (parentId: string) =>
+    subCategories.filter((sub) => sub.parentId === parentId);
+
+  const handleAmountChange = (value: string) => {
+    const numericValue = value.replace(/[^\d]/g, "");
+    setAmount(numericValue);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
     const amountInCents = parseCurrency(amount);
-    
+    console.log({ amountInCents, amount });
+
     try {
       if (transaction) {
         await updateTransactionMutation.mutateAsync({
@@ -78,9 +115,12 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
             categoryId: categoryId || undefined,
             sourceFundId: sourceFundId || undefined,
             destinationFundId: destinationFundId || undefined,
-          }
+          },
         });
-        toast({ title: 'Transaction updated', description: 'Your transaction has been saved.' });
+        toast({
+          title: "Transaction updated",
+          description: "Your transaction has been saved.",
+        });
       } else {
         await addTransactionMutation.mutateAsync({
           description,
@@ -92,11 +132,18 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
           sourceFundId: sourceFundId || undefined,
           destinationFundId: destinationFundId || undefined,
         });
-        toast({ title: 'Transaction created', description: 'Your transaction has been added.' });
+        toast({
+          title: "Transaction created",
+          description: "Your transaction has been added.",
+        });
       }
       onClose();
     } catch (error: any) {
-      toast({ title: 'Transaction Failed', description: error.message, variant: 'destructive' });
+      toast({
+        title: "Transaction Failed",
+        description: error.message,
+        variant: "destructive",
+      });
     }
   };
 
@@ -104,7 +151,9 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>{transaction ? 'Edit Transaction' : 'Add Transaction'}</DialogTitle>
+          <DialogTitle>
+            {transaction ? "Edit Transaction" : "Add Transaction"}
+          </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
@@ -121,18 +170,28 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="amount">Amount</Label>
-              <Input
-                id="amount"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.00"
-                required
-              />
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                  Rp
+                </span>
+                <Input
+                  id="amount"
+                  type="text"
+                  inputMode="numeric"
+                  className="text-right pl-8"
+                  value={formatCurrencyForInput(amount || "0")}
+                  onChange={(e) => handleAmountChange(e.target.value)}
+                  required
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="type">Type</Label>
-              <Select value={type} onValueChange={(value) => setType(value as TransactionType)}>
+              <Select
+                value={type}
+                onValueChange={(value) => setType(value as TransactionType)}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -156,24 +215,34 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
             />
           </div>
 
-          {type !== 'transfer' && (
+          {type !== "transfer" && (
             <div className="space-y-2">
               <Label htmlFor="category">Category</Label>
-              <Select 
-                value={categoryId || "__none"} 
-                onValueChange={(value) => setCategoryId(value === "__none" ? null : value)}
+              <Select
+                value={categoryId || "__none"}
+                onValueChange={(value) =>
+                  setCategoryId(value === "__none" ? null : value)
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none">None</SelectItem>
-                  {parentCategories.map(parent => (
+                  {parentCategories.map((parent) => (
                     <SelectGroup key={parent.id}>
                       <SelectLabel>{parent.name}</SelectLabel>
-                      <SelectItem value={parent.id} className="pl-6">{parent.name}</SelectItem>
-                      {getSubCategories(parent.id).map(sub => (
-                        <SelectItem key={sub.id} value={sub.id} className="pl-8">{sub.name}</SelectItem>
+                      <SelectItem value={parent.id} className="pl-6">
+                        {parent.name}
+                      </SelectItem>
+                      {getSubCategories(parent.id).map((sub) => (
+                        <SelectItem
+                          key={sub.id}
+                          value={sub.id}
+                          className="pl-8"
+                        >
+                          {sub.name}
+                        </SelectItem>
                       ))}
                     </SelectGroup>
                   ))}
@@ -182,38 +251,46 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
             </div>
           )}
 
-          {type === 'transfer' ? (
+          {type === "transfer" ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="sourceFund">Source Fund</Label>
-                <Select 
-                  value={sourceFundId || "__none"} 
-                  onValueChange={(value) => setSourceFundId(value === "__none" ? null : value)}
+                <Select
+                  value={sourceFundId || "__none"}
+                  onValueChange={(value) =>
+                    setSourceFundId(value === "__none" ? null : value)
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select source" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none">None</SelectItem>
-                    {fundSources.map(source => (
-                      <SelectItem key={source.id} value={source.id}>{source.name}</SelectItem>
+                    {fundSources.map((source) => (
+                      <SelectItem key={source.id} value={source.id}>
+                        {source.name}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="destinationFund">Destination Fund</Label>
-                <Select 
-                  value={destinationFundId || "__none"} 
-                  onValueChange={(value) => setDestinationFundId(value === "__none" ? null : value)}
+                <Select
+                  value={destinationFundId || "__none"}
+                  onValueChange={(value) =>
+                    setDestinationFundId(value === "__none" ? null : value)
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select destination" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none">None</SelectItem>
-                    {fundSources.map(source => (
-                      <SelectItem key={source.id} value={source.id}>{source.name}</SelectItem>
+                    {fundSources.map((source) => (
+                      <SelectItem key={source.id} value={source.id}>
+                        {source.name}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -222,12 +299,15 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
           ) : (
             <div className="space-y-2">
               <Label htmlFor="fundSource">
-                {type === 'income' ? 'Destination Fund' : 'Source Fund'}
+                {type === "income" ? "Destination Fund" : "Source Fund"}
               </Label>
-              <Select 
-                value={(type === 'income' ? destinationFundId : sourceFundId) || "__none"} 
+              <Select
+                value={
+                  (type === "income" ? destinationFundId : sourceFundId) ||
+                  "__none"
+                }
                 onValueChange={(value) => {
-                  if (type === 'income') {
+                  if (type === "income") {
                     setDestinationFundId(value === "__none" ? null : value);
                   } else {
                     setSourceFundId(value === "__none" ? null : value);
@@ -235,12 +315,18 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={`Select ${type === 'income' ? 'destination' : 'source'} fund`} />
+                  <SelectValue
+                    placeholder={`Select ${
+                      type === "income" ? "destination" : "source"
+                    } fund`}
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none">None</SelectItem>
-                  {fundSources.map(source => (
-                    <SelectItem key={source.id} value={source.id}>{source.name}</SelectItem>
+                  {fundSources.map((source) => (
+                    <SelectItem key={source.id} value={source.id}>
+                      {source.name}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -251,9 +337,7 @@ export const TransactionDialog = ({ open, onClose, transaction }: TransactionDia
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit">
-              {transaction ? 'Update' : 'Create'}
-            </Button>
+            <Button type="submit">{transaction ? "Update" : "Create"}</Button>
           </div>
         </form>
       </DialogContent>

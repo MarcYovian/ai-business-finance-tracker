@@ -34,7 +34,7 @@ import {
   useDeleteFundSource,
   useFundSources,
 } from "@/hooks/useFundSources";
-import { formatCurrency } from "@/lib/currency";
+import { formatCurrency, formatCurrencyForInput } from "@/lib/currency";
 import { aiConfigStorage } from "@/lib/storage";
 import {
   AlertCircle,
@@ -52,6 +52,7 @@ import {
   Trash2,
   Wallet,
 } from "lucide-react";
+import { P } from "node_modules/framer-motion/dist/types.d-BJcRxCew";
 import { useEffect, useState } from "react";
 
 const ListSkeleton = () => (
@@ -240,6 +241,11 @@ export default function Settings() {
       ...prev,
       [categoryId]: !prev[categoryId],
     }));
+  };
+
+  const handleAmountChange = (value: string) => {
+    const numericValue = value.replace(/[^\d]/g, "");
+    setNewFundSourceBalance(numericValue);
   };
 
   const handleAddFundSource = async (e: React.FormEvent) => {
@@ -1049,17 +1055,22 @@ export default function Settings() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="fund-balance">Balance</Label>
-                      <Input
-                        id="fund-balance"
-                        value={newFundSourceBalance}
-                        onChange={(e) =>
-                          setNewFundSourceBalance(e.target.value)
-                        }
-                        placeholder="0.00"
-                        type="number"
-                        step="0.01"
-                        required
-                      />
+                      <div className="relative">
+                        <span className="absolute inset-y-0 left-3 flex items-center text-sm text-muted-foreground">
+                          Rp
+                        </span>
+                        <Input
+                          id="fund-balance"
+                          type="text"
+                          inputMode="numeric"
+                          className="text-right pl-8"
+                          value={formatCurrencyForInput(
+                            newFundSourceBalance || "0"
+                          )}
+                          onChange={(e) => handleAmountChange(e.target.value)}
+                          required
+                        />
+                      </div>
                     </div>
                   </div>
                   <Button
