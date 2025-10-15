@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, LayoutDashboard, Receipt, Bot, Settings, LogOut } from 'lucide-react';
+import { Menu, LayoutDashboard, Receipt, Bot, Settings, LogOut, Target } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 interface LayoutProps {
@@ -13,6 +13,7 @@ interface LayoutProps {
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/transactions', label: 'Transactions', icon: Receipt },
+  { path: '/budget', label: 'Budget', icon: Target },
   { path: '/ai-assistant', label: 'AI Assistant', icon: Bot },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];

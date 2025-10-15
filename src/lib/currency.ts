@@ -10,6 +10,17 @@ export const formatCurrency = (amountInCents: number): string => {
   }).format(amount);
 };
 
+/**
+ * Formats a raw number or string into a string with thousand separators for input fields.
+ * e.g., 1500000 -> "1.500.000"
+ */
+export const formatCurrencyForInput = (value: number | string): string => {
+  const num = Number(String(value).replace(/[^\d]/g, ''));
+  if (isNaN(num)) return '0';
+  return new Intl.NumberFormat('id-ID').format(num);
+};
+
+
 export const parseCurrency = (input: string): number => {
   // Remove currency symbols, dots (as thousands separators), and whitespace
   const cleaned = input.replace(/[Rp.\s]/g, "").replace(/,00$/, "");

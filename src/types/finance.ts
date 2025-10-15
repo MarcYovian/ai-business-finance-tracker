@@ -1,4 +1,5 @@
-export type TransactionType = 'income' | 'expense' | 'transfer';
+export type TransactionType = "income" | "expense" | "transfer";
+export type FundType = "bank" | "cash" | "other";
 
 export interface User {
   id: string;
@@ -11,16 +12,43 @@ export interface Category {
   name: string;
   userId: string;
   createdAt: string;
-  type: 'income' | 'expense';
+  type: "income" | "expense";
   parentId?: string | null;
 }
 
 export interface FundSource {
   id: string;
+  user_id: string;
   name: string;
-  balance: number; // stored in cents
-  userId: string;
-  createdAt: string;
+  type: FundType;
+  balance: number;
+  created_at: string;
+}
+
+export interface Budget {
+  id: string;
+  user_id: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+  created_at: string;
+}
+
+export interface BudgetItem {
+  id: string;
+  budget_id: string;
+  category_id: string;
+  amount: number; // in cents
+  created_at: string;
+}
+
+export interface BudgetDetail {
+  id: string;
+  category_id: string;
+  category_name: string;
+  category_icon: string;
+  amount: number; // in cents
+  spent: number; // in cents
 }
 
 export interface Transaction {
