@@ -1,0 +1,374 @@
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "@/hooks/use-toast";
+import { extractCurrencyFromText } from "@/lib/currency";
+import {
+  aiConfigStorage,
+  categoryStorage,
+  fundSourceStorage,
+  transactionStorage,
+} from "@/lib/storage";
+import { AIResponse, Transaction } from "@/types/finance";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { useEffect, useRef, useState } from "react";
+
+// Definisikan tipe untuk pesan dalam percakapan
+interface Message {
+  role: "user" | "assistant";
+  content: string;
+}
+
+// Helper function to extract JSON from a string that might contain markdown code blocks
+const extractJsonFromString = (text: string): any | null => {
+  const jsonRegex = /```json\s*([\s\S]*?)\s*```|({[\s\S]*?})|(\[[\s\S]*?\])/;
+  const match = text.match(jsonRegex);
+  if (match) {
+    const jsonString = match[1] || match[2] || match[3];
+    if (jsonString) {
+      try {
+        return JSON.parse(jsonString.trim());
+      } catch (e) {
+        console.error("Failed to parse extracted JSON:", e);
+      }
+    }
+  }
+  return null;
+};
+
+export const useAIAssistant = () => {
+  const { user } = useAuth();
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      role: "assistant",
+      content:
+        "Hai! Saya asisten keuangan AI Anda. Sampaikan transaksi Anda dalam bahasa sehari-hari, atau ajukan pertanyaan tentang data keuangan Anda.",
+    },
+  ]);
+  const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [conversationContext, setConversationContext] = useState<any | null>(
+    null
+  );
+
+  const processWithGemini = async (
+    apiKey: string,
+    prompt: string
+  ): Promise<string> => {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    return response.text();
+  };
+
+  const processWithOpenAI = async (
+    apiKey: string,
+    systemPrompt: string,
+    userInput: string
+  ): Promise<string> => {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userInput },
+        ],
+        temperature: 0.3,
+      }),
+    });
+    if (!response.ok) throw new Error("OpenAI API request failed");
+    const data = await response.json();
+    return data.choices[0].message.content;
+  };
+
+  const handleSend = async (prompt?: string) => {
+    const userMessage = (prompt || input).trim();
+    if (!userMessage) return;
+
+    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+    setInput("");
+    setIsLoading(true);
+
+    try {
+      await processAIResponse(userMessage);
+    } catch (error) {
+      console.error("AI processing error:", error);
+      toast({
+        title: "Error",
+        description: "Gagal memproses permintaan Anda.",
+        variant: "destructive",
+      });
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "Maaf, terjadi kesalahan. Silakan coba ulangi lagi.",
+        },
+      ]);
+    }
+    setIsLoading(false);
+  };
+
+  const processAIResponse = async (userInput: string) => {
+    if (!user) return;
+
+    const provider = aiConfigStorage.getProvider();
+    const apiKey = aiConfigStorage.getActiveKey();
+
+    if (!apiKey) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: `API Key belum diatur. Silakan atur di halaman Settings.`,
+        },
+      ]);
+      return;
+    }
+
+    const classifierPrompt = `You are an intent classification expert. Your job is to analyze the user's input and determine their primary intent. Your response MUST be a valid JSON object, and nothing else.
+
+    The possible intents are:
+    - "log_transaction": The user is describing a financial transaction.
+    - "query_data": The user is asking a question about their financial data.
+    - "general_help": The user is asking about your capabilities, greeting you, or having a general conversation.
+    
+    JSON Output Schema:
+    - For "log_transaction" or "general_help", return: {"intent": "intent_name"}
+    - For "query_data", also extract the core question: {"intent": "query_data", "query": "summarized user question in English"}
+    
+    User Input: "${userInput}"
+    
+    Your JSON Response:`;
+
+    let classificationContent: string;
+    if (provider === "gemini") {
+      classificationContent = await processWithGemini(apiKey, classifierPrompt);
+    } else {
+      classificationContent = await processWithOpenAI(
+        apiKey,
+        classifierPrompt,
+        userInput
+      );
+    }
+
+    const classification = extractJsonFromString(classificationContent);
+
+    if (!classification || !classification.intent) {
+      handleGeneralHelp(
+        "Maaf, saya tidak mengerti maksud Anda. Anda bisa meminta saya mencatat transaksi atau bertanya tentang data keuangan."
+      );
+      return;
+    }
+
+    switch (classification.intent) {
+      case "log_transaction":
+        await handleLogTransaction(userInput);
+        break;
+      case "query_data":
+        await handleQueryData(userInput, classification.query);
+        break;
+      case "general_help":
+        handleGeneralHelp();
+        break;
+      default:
+        handleGeneralHelp(
+          "Saya tidak yakin bagaimana merespons itu. Anda bisa meminta saya mencatat transaksi atau bertanya tentang data keuangan Anda."
+        );
+    }
+  };
+
+  const handleLogTransaction = async (userInput: string) => {
+    if (!user) return;
+
+    const provider = aiConfigStorage.getProvider();
+    const apiKey = aiConfigStorage.getActiveKey();
+    if (!apiKey) return;
+
+    const [categories, fundSources] = await Promise.all([
+      categoryStorage.getAll(user.id),
+      fundSourceStorage.getAll(user.id),
+    ]);
+
+    const systemPrompt = `
+      You are an expert financial assistant for a user in Indonesia. Your task is to extract transaction details from user input and respond ONLY with a valid JSON format.
+      - Current date: ${new Date().toISOString().split("T")[0]}
+      - User's categories: ${categories.map((c) => c.name).join(", ") || "none"}
+      - User's fund sources: ${
+        fundSources.map((f) => f.name).join(", ") || "none"
+      }
+      
+      JSON Schema:
+      - "type": "income", "expense", or "transfer".
+      - "amount": Numeric value.
+      - "description": Brief summary.
+      - "date": YYYY-MM-DD format. Default to today.
+      - "category": Match from user's list or suggest a new one.
+      - "fundSource": Source/destination of funds.
+      - "sourceFund": ONLY for "transfer".
+      - "destinationFund": ONLY for "transfer".
+
+      User input: ${userInput}
+
+      Respond ONLY with valid JSON:
+      `;
+
+    let aiContent: string;
+    if (provider === "gemini") {
+      aiContent = await processWithGemini(apiKey, systemPrompt);
+    } else {
+      aiContent = await processWithOpenAI(apiKey, systemPrompt, userInput);
+    }
+
+    const aiResponse: AIResponse | AIResponse[] | null =
+      extractJsonFromString(aiContent);
+
+    if (!aiResponse) {
+      throw new Error("AI response could not be parsed as valid JSON");
+    }
+
+    const transactions = Array.isArray(aiResponse) ? aiResponse : [aiResponse];
+
+    for (const transaction of transactions) {
+      await transactionStorage.create({
+        description: transaction.description,
+        amount: transaction.amount,
+        type: transaction.type,
+        transactionDate: transaction.date
+          ? new Date(transaction.date).toISOString()
+          : new Date().toISOString(),
+        userId: user.id,
+        categoryId: transaction.category,
+        sourceFundId: transaction.sourceFund,
+        destinationFundId: transaction.destinationFund,
+      });
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: `Transaksi "${transaction.description}" sebesar ${transaction.amount} berhasil dicatat.`,
+        },
+      ]);
+    }
+  };
+
+  const handleQueryData = async (originalQuery: string, query: string) => {
+    if (!user) return;
+
+    const [transactions, categories, fundSources] = await Promise.all([
+      transactionStorage.getAll(user.id),
+      categoryStorage.getAll(user.id),
+      fundSourceStorage.getAll(user.id),
+    ]);
+
+    let dataSummary = {};
+    const now = new Date();
+    const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // Simple keyword matching for different queries
+    if (
+      query.toLowerCase().includes("biggest spending category") ||
+      query.toLowerCase().includes("kategori pengeluaran terbesar")
+    ) {
+      const expenseByCategory = transactions
+        .filter((t) => t.type === "expense" && t.categoryId)
+        .reduce((acc, t) => {
+          const category = categories.find((c) => c.id === t.categoryId);
+          if (category) {
+            acc[category.name] = (acc[category.name] || 0) + t.amount;
+          }
+          return acc;
+        }, {} as Record<string, number>);
+
+      const topCategory = Object.entries(expenseByCategory).sort(
+        (a, b) => b[1] - a[1]
+      )[0];
+      dataSummary = {
+        query: "top_expense_category",
+        category: topCategory ? topCategory[0] : "N/A",
+        amount: topCategory ? topCategory[1] : 0,
+      };
+    } else if (
+      query.toLowerCase().includes("total expenses this month") ||
+      query.toLowerCase().includes("pengeluaran saya bulan ini")
+    ) {
+      const expensesThisMonth = transactions
+        .filter(
+          (t) =>
+            t.type === "expense" && new Date(t.transactionDate) >= thisMonth
+        )
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      dataSummary = {
+        query: "total_expenses_month",
+        total: expensesThisMonth,
+      };
+    } else {
+      dataSummary = {
+        query: "fallback",
+        message:
+          "Saya belum bisa menjawab pertanyaan tersebut. Silakan coba pertanyaan lain.",
+      };
+    }
+
+    const answererPrompt = `You are a helpful financial assistant. Answer the user's question in natural Indonesian based on the data summary provided.
+
+      Data Summary:
+      ${JSON.stringify(dataSummary)}
+      
+      User's Original Question: "${originalQuery}"
+      
+      Your Answer (in Indonesian):`;
+
+    const provider = aiConfigStorage.getProvider();
+    const apiKey = aiConfigStorage.getActiveKey();
+    if (!apiKey) return;
+
+    let finalAnswer: string;
+    if (provider === "gemini") {
+      finalAnswer = await processWithGemini(apiKey, answererPrompt);
+    } else {
+      finalAnswer = await processWithOpenAI(
+        apiKey,
+        answererPrompt,
+        originalQuery
+      );
+    }
+
+    setMessages((prev) => [
+      ...prev,
+      { role: "assistant", content: finalAnswer },
+    ]);
+  };
+
+  const handleGeneralHelp = (customMessage?: string) => {
+    const helpMessage =
+      customMessage ||
+      "Tentu! Saya bisa membantu Anda mencatat transaksi (pemasukan, pengeluaran, transfer) atau menjawab pertanyaan terkait data keuangan Anda, seperti 'Berapa total pengeluaran bulan ini?' atau 'Apa kategori pengeluaran terbesar?'.";
+    setMessages((prev) => [
+      ...prev,
+      { role: "assistant", content: helpMessage },
+    ]);
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  return {
+    messages,
+    input,
+    isLoading,
+    handleSend,
+    setInput,
+    handleKeyPress,
+  };
+};
