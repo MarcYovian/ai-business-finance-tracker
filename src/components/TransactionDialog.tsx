@@ -22,9 +22,15 @@ import { useCategories } from "@/hooks/useCategories";
 import { useFundSources } from "@/hooks/useFundSources";
 import {
   useAddTransaction,
+  useTransactions,
   useUpdateTransaction,
 } from "@/hooks/useTransactions";
-import { formatCurrencyForInput, parseCurrency } from "@/lib/currency";
+import {
+  formatCurrency,
+  formatCurrencyForInput,
+  parseCurrency,
+  parseCurrencyWithoutMultiplier,
+} from "@/lib/currency";
 import {
   Category,
   FundSource,
@@ -54,6 +60,10 @@ export const TransactionDialog = ({
   const [destinationFundId, setDestinationFundId] = useState<string | null>(
     null
   );
+  const [fee, setFee] = useState("");
+
+  // Filter transactions based on type
+  const { data: allTransactions = [] } = useTransactions(user?.id || "");
 
   // Filter categories based on transaction type
   const { data: categories = [] } = useCategories(
@@ -74,6 +84,14 @@ export const TransactionDialog = ({
       setCategoryId(transaction.categoryId || null);
       setSourceFundId(transaction.sourceFundId || null);
       setDestinationFundId(transaction.destinationFundId || null);
+
+      const feeAmount =
+        transaction.type === "transfer"
+          ? allTransactions.find(
+              (t) => t.parentTransactionId === transaction.id
+            )?.amount
+          : undefined;
+      setFee(feeAmount != null ? (feeAmount / 100).toString() : "");
     } else {
       setDescription("");
       setAmount("");
@@ -82,8 +100,9 @@ export const TransactionDialog = ({
       setCategoryId(null);
       setSourceFundId(null);
       setDestinationFundId(null);
+      setFee("");
     }
-  }, [transaction]);
+  }, [transaction, open, allTransactions]);
 
   // Group categories by parent for hierarchical display
   const parentCategories = categories.filter((cat) => !cat.parentId);
@@ -96,12 +115,17 @@ export const TransactionDialog = ({
     setAmount(numericValue);
   };
 
+  const handleFeeChange = (value: string) => {
+    const numericValue = value.replace(/[^\d]/g, "");
+    setFee(numericValue);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
-    const amountInCents = parseCurrency(amount);
-    console.log({ amountInCents, amount });
+    const amountValue = parseCurrencyWithoutMultiplier(amount);
+    const feeValue = fee ? parseCurrencyWithoutMultiplier(fee) : 0;
 
     try {
       if (transaction) {
@@ -109,12 +133,13 @@ export const TransactionDialog = ({
           id: transaction.id,
           updates: {
             description,
-            amount: amountInCents,
+            amount: amountValue,
             type,
             transactionDate: new Date(date).toISOString(),
             categoryId: categoryId || undefined,
             sourceFundId: sourceFundId || undefined,
             destinationFundId: destinationFundId || undefined,
+            fee: feeValue,
           },
         });
         toast({
@@ -124,13 +149,14 @@ export const TransactionDialog = ({
       } else {
         await addTransactionMutation.mutateAsync({
           description,
-          amount: amountInCents,
+          amount: amountValue,
           type,
           transactionDate: new Date(date).toISOString(),
           userId: user.id,
           categoryId: categoryId || undefined,
           sourceFundId: sourceFundId || undefined,
           destinationFundId: destinationFundId || undefined,
+          fee: feeValue,
         });
         toast({
           title: "Transaction created",
@@ -268,7 +294,7 @@ export const TransactionDialog = ({
                     <SelectItem value="__none">None</SelectItem>
                     {fundSources.map((source) => (
                       <SelectItem key={source.id} value={source.id}>
-                        {source.name}
+                        {source.name} ({formatCurrency(source.balance)})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -289,7 +315,7 @@ export const TransactionDialog = ({
                     <SelectItem value="__none">None</SelectItem>
                     {fundSources.map((source) => (
                       <SelectItem key={source.id} value={source.id}>
-                        {source.name}
+                        {source.name} ({formatCurrency(source.balance)})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -325,11 +351,30 @@ export const TransactionDialog = ({
                   <SelectItem value="__none">None</SelectItem>
                   {fundSources.map((source) => (
                     <SelectItem key={source.id} value={source.id}>
-                      {source.name}
+                      {source.name} ({formatCurrency(source.balance)})
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+
+          {type === "transfer" && (
+            <div className="space-y-2">
+              <Label htmlFor="fee">Admin Fee (Optional)</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                  Rp
+                </span>
+                <Input
+                  id="fee"
+                  type="text"
+                  inputMode="numeric"
+                  className="text-right pl-8"
+                  value={formatCurrencyForInput(fee || "0")}
+                  onChange={(e) => handleFeeChange(e.target.value)}
+                />
+              </div>
             </div>
           )}
 

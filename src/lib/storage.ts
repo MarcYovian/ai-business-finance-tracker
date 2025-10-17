@@ -257,6 +257,7 @@ export const transactionStorage = {
         categoryId: transaction.category_id,
         sourceFundId: transaction.source_fund_id,
         destinationFundId: transaction.destination_fund_id,
+        parentTransactionId: transaction.parent_transaction_id,
       })) || []
     );
   },
@@ -264,6 +265,9 @@ export const transactionStorage = {
   create: async (
     transaction: Omit<Transaction, "id" | "createdAt">
   ): Promise<Transaction> => {
+    const amountInCents = transaction.amount * 100;
+    const feeInCents = transaction.fee ? transaction.fee * 100 : 0;
+
     // Check for sufficient funds for expense transactions
     if (
       (transaction.type === "expense" || transaction.type === "transfer") &&
@@ -279,7 +283,7 @@ export const transactionStorage = {
         throw new Error("Source fund not found.");
       }
 
-      if (sourceFund.balance < transaction.amount) {
+      if (sourceFund.balance < amountInCents + feeInCents) {
         throw new Error("Insufficient funds in the source account.");
       }
     }
@@ -287,13 +291,14 @@ export const transactionStorage = {
     const { data: newTransaction, error } = await supabase
       .rpc("create_transaction_and_update_balance", {
         p_description: transaction.description,
-        p_amount: transaction.amount,
+        p_amount: amountInCents,
         p_type: transaction.type,
         p_transaction_date: transaction.transactionDate,
         p_user_id: transaction.userId,
         p_category_id: transaction.categoryId ?? null,
         p_source_fund_id: transaction.sourceFundId ?? null,
         p_destination_fund_id: transaction.destinationFundId ?? null,
+        p_fee: feeInCents ?? null,
       })
       .select()
       .single();
@@ -318,18 +323,40 @@ export const transactionStorage = {
   },
 
   update: async (id: string, updates: Partial<Transaction>): Promise<void> => {
-    // Memanggil RPC function yang baru dibuat
+    const amountInCents = updates.amount ? updates.amount * 100 : 0;
+    const feeInCents = updates.fee ? updates.fee * 100 : 0;
+
+    if (
+      (updates.type === "expense" || updates.type === "transfer") &&
+      updates.sourceFundId
+    ) {
+      const { data: sourceFund, error: fundError } = await supabase
+        .from("fund_sources")
+        .select("balance")
+        .eq("id", updates.sourceFundId)
+        .single();
+
+      if (fundError || !sourceFund) {
+        throw new Error("Source fund not found.");
+      }
+
+      if (sourceFund.balance < amountInCents + feeInCents) {
+        throw new Error("Insufficient funds in the source account.");
+      }
+    }
+
     const { data, error } = await supabase.rpc(
       "update_transaction_and_update_balance",
       {
         p_id: id,
         p_description: updates.description,
-        p_amount: updates.amount,
+        p_amount: amountInCents,
         p_type: updates.type,
         p_transaction_date: updates.transactionDate,
         p_category_id: updates.categoryId,
         p_source_fund_id: updates.sourceFundId || null,
         p_destination_fund_id: updates.destinationFundId || null,
+        p_fee: feeInCents || null,
       }
     );
 

@@ -18,6 +18,7 @@ export const useAddTransaction = () => {
       transactionStorage.create(transaction),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["fundSources"] });
     },
   });
 };

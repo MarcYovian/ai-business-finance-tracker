@@ -54,7 +54,7 @@ export interface BudgetDetail {
 export interface Transaction {
   id: string;
   description: string;
-  amount: number; // stored in cents
+  amount: number;
   type: TransactionType;
   transactionDate: string;
   createdAt: string;
@@ -62,6 +62,8 @@ export interface Transaction {
   categoryId?: string;
   sourceFundId?: string;
   destinationFundId?: string;
+  fee?: number;
+  parentTransactionId?: string;
 }
 
 export interface AIResponse {
