@@ -367,8 +367,17 @@ export const transactionStorage = {
   },
 
   delete: async (id: string): Promise<void> => {
-    const { error } = await supabase.from("transactions").delete().eq("id", id);
-    if (error) throw error;
+    const { error } = await supabase.rpc(
+      "delete_transaction_and_revert_balance",
+      {
+        p_transaction_id: id,
+      }
+    );
+
+    if (error) {
+      console.error("Error deleting transaction:", error);
+      throw error;
+    }
   },
 
   createTransfer: async (

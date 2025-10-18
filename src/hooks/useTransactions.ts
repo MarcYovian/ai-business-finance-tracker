@@ -48,6 +48,7 @@ export const useDeleteTransaction = () => {
     mutationFn: (id: string) => transactionStorage.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["fundSources"] });
     },
   });
 };

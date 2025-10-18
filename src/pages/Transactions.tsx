@@ -15,6 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { TransactionIcon } from '@/components/TransactionIcon';
+import { DeleteConfirmationDialog } from '@/components/DeleteConfirmationDialog';
 
 const TransactionLoading = () => (
   <Layout>
@@ -67,6 +68,8 @@ export default function Transactions() {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<string>('date-desc');
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
 
   const { data: transactions = [], isLoading } = useTransactions(user?.id || '');
   const { data: categories = [] } = useCategories(user?.id || '');
@@ -90,14 +93,20 @@ export default function Transactions() {
     });
   }, [transactions, typeFilter, sortBy]);
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this transaction?')) {
-      try {
-        await deleteTransactionMutation.mutateAsync(id);
-        toast({ title: 'Transaction deleted' });
-      } catch (error) {
-        toast({ title: 'Error', description: 'Could not delete transaction.', variant: 'destructive' });
-      }
+  const handleDelete = (id: string) => {
+    setTransactionToDelete(id);
+    setIsDeleteOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!transactionToDelete) return;
+    try {
+      await deleteTransactionMutation.mutateAsync(transactionToDelete);
+      toast({ title: 'Transaction deleted' });
+      setIsDeleteOpen(false);
+      setTransactionToDelete(null);
+    } catch (error) {
+      toast({ title: 'Error', description: 'Could not delete transaction.', variant: 'destructive' });
     }
   };
 
@@ -220,6 +229,13 @@ export default function Transactions() {
         open={isDialogOpen}
         onClose={handleDialogClose}
         transaction={editingTransaction}
+      />
+
+      <DeleteConfirmationDialog
+        open={isDeleteOpen}
+        onClose={() => setIsDeleteOpen(false)}
+        onConfirm={handleConfirmDelete}
+        isPending={deleteTransactionMutation.isPending}
       />
     </Layout>
   );
