@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -32,8 +33,9 @@ import {
 } from "@/lib/currency";
 import { Transaction, TransactionType } from "@/types/finance";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Trash2 } from "lucide-react";
 import { useEffect } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 import {
   Form,
@@ -111,12 +113,14 @@ interface TransactionDialogProps {
   open: boolean;
   onClose: () => void;
   transaction?: Transaction | null;
+  onDelete?: () => void;
 }
 
 export const TransactionDialog = ({
   open,
   onClose,
   transaction,
+  onDelete,
 }: TransactionDialogProps) => {
   const { user } = useAuth();
   const form = useForm<TransactionFormData>({
@@ -211,7 +215,8 @@ export const TransactionDialog = ({
         });
       } else {
         await addTransactionMutation.mutateAsync({
-          ...data,
+          description: data.description,
+          type: data.type,
           amount: amountValue,
           transactionDate: new Date(data.transactionDate).toISOString(),
           userId: user.id,
@@ -228,7 +233,9 @@ export const TransactionDialog = ({
       onClose();
     } catch (error: unknown) {
       const errorMessage =
-        error instanceof Error ? error.message : "An unexpected error occurred.";
+        error instanceof Error
+          ? error.message
+          : "An unexpected error occurred.";
       toast({
         title: "Transaction Failed",
         description: errorMessage,
@@ -237,9 +244,16 @@ export const TransactionDialog = ({
     }
   };
 
+  const handleDelete = () => {
+    if (onDelete) {
+      onDelete();
+      onClose();
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {transaction ? "Edit Transaction" : "Add Transaction"}
@@ -257,10 +271,7 @@ export const TransactionDialog = ({
                 <FormItem>
                   <FormLabel>Description</FormLabel>
                   <FormControl>
-                    <Input
-                      placeholder="e.g., Coffee with client"
-                      {...field}
-                    />
+                    <Input placeholder="e.g., Coffee with client" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -444,9 +455,7 @@ export const TransactionDialog = ({
             ) : (
               <FormField
                 control={form.control}
-                name={
-                  type === "income" ? "destinationFundId" : "sourceFundId"
-                }
+                name={type === "income" ? "destinationFundId" : "sourceFundId"}
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
@@ -512,17 +521,39 @@ export const TransactionDialog = ({
               />
             )}
 
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={addTransactionMutation.isPending}
-              >
-                {transaction ? "Update" : "Create"}
-              </Button>
-            </div>
+            <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
+              {transaction && onDelete && (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={handleDelete}
+                  className="sm:mr-auto"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </Button>
+              )}
+              <div className="flex gap-2 w-full sm:w-auto">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={onClose}
+                  className="flex-1 sm:flex-none"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={
+                    addTransactionMutation.isPending ||
+                    updateTransactionMutation.isPending
+                  }
+                  className="flex-1 sm:flex-none"
+                >
+                  {transaction ? "Update" : "Create"}
+                </Button>
+              </div>
+            </DialogFooter>
           </form>
         </Form>
       </DialogContent>
