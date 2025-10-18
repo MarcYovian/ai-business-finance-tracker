@@ -64,15 +64,25 @@ describe('Storage', () => {
         }),
       });
 
-      const category = await categoryStorage.create('Food', 'user1');
+      const category = await categoryStorage.create('Food', 'user1', 'expense', null);
 
       expect(category).toEqual({
         id: 'cat1',
         name: 'Food',
         userId: 'user1',
+        type: 'expense',
+        parentId: null,
         createdAt: mockCategory.created_at,
       });
     });
+
+    it('creates a subcategory', async () => {
+      const mockCategory = { id: 'cat2', name: 'Groceries', user_id: 'user1', created_at: new Date().toISOString(), parent_id: 'cat1' };
+      (supabase.from as any).mockReturnValue({
+        insert: vi.fn().mockReturnValue({
+          select: vi.fn().mockResolvedValue({ data: [mockCategory], error: null }),
+        }),
+      });
   });
 
   describe('fundSourceStorage', () => {
