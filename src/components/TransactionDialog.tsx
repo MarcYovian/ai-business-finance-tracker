@@ -7,7 +7,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -19,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
+import { useBudgetDetails, useCurrentBudget } from "@/hooks/useBudget";
 import { useCategories } from "@/hooks/useCategories";
 import { useFundSources } from "@/hooks/useFundSources";
 import {
@@ -31,12 +31,19 @@ import {
   formatCurrencyForInput,
   parseCurrencyWithoutMultiplier,
 } from "@/lib/currency";
-import { Transaction, TransactionType } from "@/types/finance";
+import { cn } from "@/lib/utils";
+import { Transaction } from "@/types/finance";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Trash2 } from "lucide-react";
-import { useEffect } from "react";
-import { Controller, useForm } from "react-hook-form";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Trash2,
+  TrendingDown,
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { Alert, AlertDescription } from "./ui/alert";
 import {
   Form,
   FormControl,
@@ -45,6 +52,7 @@ import {
   FormLabel,
   FormMessage,
 } from "./ui/form";
+import { Progress } from "./ui/progress";
 
 const transactionSchema = z
   .object({
@@ -138,6 +146,9 @@ export const TransactionDialog = ({
   });
 
   const type = form.watch("type");
+  const selectedCategoryId = form.watch("categoryId");
+  const amountString = form.watch("amount");
+  const transactionDate = form.watch("transactionDate");
 
   const { data: allTransactions = [] } = useTransactions(user?.id || "");
   const { data: categories = [] } = useCategories(
@@ -145,6 +156,11 @@ export const TransactionDialog = ({
     type === "transfer" ? undefined : type
   );
   const { data: fundSources = [] } = useFundSources(user?.id || "");
+
+  // Get budget for the transaction month
+  const selectedDate = transactionDate ? new Date(transactionDate) : new Date();
+  const { data: currentBudget } = useCurrentBudget(selectedDate);
+  const { data: budgetDetails = [] } = useBudgetDetails(currentBudget?.id);
 
   const addTransactionMutation = useAddTransaction();
   const updateTransactionMutation = useUpdateTransaction();
@@ -183,6 +199,56 @@ export const TransactionDialog = ({
       }
     }
   }, [transaction, open, allTransactions, form]);
+
+  // Calculate budget impact
+  const budgetImpact = useMemo(() => {
+    if (
+      type !== "expense" ||
+      !selectedCategoryId ||
+      selectedCategoryId === "__none"
+    ) {
+      return null;
+    }
+
+    const budgetItem = budgetDetails.find(
+      (item) => item.category_id === selectedCategoryId
+    );
+
+    if (!budgetItem) {
+      return null;
+    }
+
+    const currentAmount = parseCurrencyWithoutMultiplier(amountString || "0");
+    const currentAmountInCents = currentAmount * 100;
+
+    // If editing, subtract the original amount from spent
+    const originalSpent =
+      transaction?.categoryId === selectedCategoryId
+        ? budgetItem.spent - transaction.amount
+        : budgetItem.spent;
+
+    const newSpent = originalSpent + currentAmountInCents;
+    const budgeted = budgetItem.amount;
+    const remaining = budgeted - newSpent;
+    const progress = budgeted > 0 ? (newSpent / budgeted) * 100 : 0;
+
+    const isOverBudget = newSpent > budgeted;
+    const isNearLimit = progress > 80 && progress <= 100;
+    const isWellWithinBudget = progress <= 80;
+
+    return {
+      categoryName: budgetItem.category_name,
+      budgeted,
+      currentSpent: originalSpent,
+      newSpent,
+      remaining,
+      progress: Math.min(progress, 100),
+      isOverBudget,
+      isNearLimit,
+      isWellWithinBudget,
+      overBudgetAmount: isOverBudget ? Math.abs(remaining) : 0,
+    };
+  }, [type, selectedCategoryId, amountString, budgetDetails, transaction]);
 
   const parentCategories = categories.filter((cat) => !cat.parentId);
   const subCategories = categories.filter((cat) => cat.parentId);
@@ -391,6 +457,92 @@ export const TransactionDialog = ({
                   </FormItem>
                 )}
               />
+            )}
+
+            {/* Budget Impact Visualization */}
+            {budgetImpact && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium">Budget Impact</span>
+                  <span className="text-muted-foreground">
+                    {budgetImpact.categoryName}
+                  </span>
+                </div>
+
+                {/* Over Budget Warning */}
+                {budgetImpact.isOverBudget && (
+                  <Alert variant="destructive" className="border-2">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription className="ml-2">
+                      <strong>Over Budget!</strong> This expense will exceed
+                      your budget by{" "}
+                      <strong>
+                        {formatCurrency(budgetImpact.overBudgetAmount)}
+                      </strong>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {/* Near Limit Warning */}
+                {budgetImpact.isNearLimit && !budgetImpact.isOverBudget && (
+                  <Alert className="border-yellow-500 border-2 bg-yellow-50 dark:bg-yellow-950">
+                    <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                    <AlertDescription className="ml-2 text-yellow-800 dark:text-yellow-200">
+                      <strong>Near Budget Limit!</strong> You're approaching
+                      your budget limit.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {/* Well Within Budget */}
+                {budgetImpact.isWellWithinBudget && (
+                  <Alert className="border-green-500 border-2 bg-green-50 dark:bg-green-950">
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    <AlertDescription className="ml-2 text-green-800 dark:text-green-200">
+                      Within budget limits
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {/* Progress Bar */}
+                <div className="space-y-2">
+                  <Progress
+                    value={budgetImpact.progress}
+                    className="h-3"
+                    indicatorClassName={cn(
+                      budgetImpact.isOverBudget && "bg-destructive",
+                      budgetImpact.isNearLimit && "bg-yellow-500",
+                      budgetImpact.isWellWithinBudget && "bg-primary"
+                    )}
+                  />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <TrendingDown className="h-3 w-3" />
+                      <span>
+                        Spent: {formatCurrency(budgetImpact.newSpent)}
+                      </span>
+                    </div>
+                    <span>
+                      Budgeted: {formatCurrency(budgetImpact.budgeted)}
+                    </span>
+                  </div>
+                  <div className="text-center">
+                    <span
+                      className={cn(
+                        "text-sm font-semibold",
+                        budgetImpact.remaining < 0
+                          ? "text-destructive"
+                          : "text-success"
+                      )}
+                    >
+                      {budgetImpact.remaining >= 0
+                        ? "Remaining: "
+                        : "Over by: "}
+                      {formatCurrency(Math.abs(budgetImpact.remaining))}
+                    </span>
+                  </div>
+                </div>
+              </div>
             )}
 
             {type === "transfer" ? (
