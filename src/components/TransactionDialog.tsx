@@ -28,16 +28,84 @@ import {
 import {
   formatCurrency,
   formatCurrencyForInput,
-  parseCurrency,
   parseCurrencyWithoutMultiplier,
 } from "@/lib/currency";
+import { Transaction, TransactionType } from "@/types/finance";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect } from "react";
+import { useForm, Controller } from "react-hook-form";
+import { z } from "zod";
 import {
-  Category,
-  FundSource,
-  Transaction,
-  TransactionType,
-} from "@/types/finance";
-import { useEffect, useState } from "react";
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "./ui/form";
+
+const transactionSchema = z
+  .object({
+    description: z.string().min(1, "Description is required."),
+    amount: z
+      .string()
+      .refine((val) => /[\d,]+/.test(val) && parseFloat(val) > 0, {
+        message: "Amount must be a positive number.",
+      }),
+    type: z.enum(["income", "expense", "transfer"]),
+    transactionDate: z.string().min(1, "Date is required."),
+    categoryId: z.string().nullable().optional(),
+    sourceFundId: z.string().nullable().optional(),
+    destinationFundId: z.string().nullable().optional(),
+    fee: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.type === "transfer") {
+      if (!data.sourceFundId || data.sourceFundId === "__none") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["sourceFundId"],
+          message: "Source fund is required for transfers.",
+        });
+      }
+      if (!data.destinationFundId || data.destinationFundId === "__none") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["destinationFundId"],
+          message: "Destination fund is required for transfers.",
+        });
+      }
+      if (
+        data.sourceFundId &&
+        data.destinationFundId &&
+        data.sourceFundId === data.destinationFundId
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["destinationFundId"],
+          message: "Destination fund cannot be the same as source fund.",
+        });
+      }
+    } else if (data.type === "income") {
+      if (!data.destinationFundId || data.destinationFundId === "__none") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["destinationFundId"],
+          message: "Destination fund is required for income.",
+        });
+      }
+    } else if (data.type === "expense") {
+      if (!data.sourceFundId || data.sourceFundId === "__none") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["sourceFundId"],
+          message: "Source fund is required for expenses.",
+        });
+      }
+    }
+  });
+
+type TransactionFormData = z.infer<typeof transactionSchema>;
 
 interface TransactionDialogProps {
   open: boolean;
@@ -51,21 +119,23 @@ export const TransactionDialog = ({
   transaction,
 }: TransactionDialogProps) => {
   const { user } = useAuth();
-  const [description, setDescription] = useState("");
-  const [amount, setAmount] = useState("");
-  const [type, setType] = useState<TransactionType>("expense");
-  const [date, setDate] = useState("");
-  const [categoryId, setCategoryId] = useState<string | null>(null);
-  const [sourceFundId, setSourceFundId] = useState<string | null>(null);
-  const [destinationFundId, setDestinationFundId] = useState<string | null>(
-    null
-  );
-  const [fee, setFee] = useState("");
+  const form = useForm<TransactionFormData>({
+    resolver: zodResolver(transactionSchema),
+    defaultValues: {
+      description: "",
+      amount: "0",
+      type: "expense",
+      transactionDate: new Date().toISOString().split("T")[0],
+      categoryId: null,
+      sourceFundId: null,
+      destinationFundId: null,
+      fee: "0",
+    },
+  });
 
-  // Filter transactions based on type
+  const type = form.watch("type");
+
   const { data: allTransactions = [] } = useTransactions(user?.id || "");
-
-  // Filter categories based on transaction type
   const { data: categories = [] } = useCategories(
     user?.id || "",
     type === "transfer" ? undefined : type
@@ -76,69 +146,62 @@ export const TransactionDialog = ({
   const updateTransactionMutation = useUpdateTransaction();
 
   useEffect(() => {
-    if (transaction) {
-      setDescription(transaction.description);
-      setAmount((transaction.amount / 100).toString());
-      setType(transaction.type);
-      setDate(transaction.transactionDate.split("T")[0]);
-      setCategoryId(transaction.categoryId || null);
-      setSourceFundId(transaction.sourceFundId || null);
-      setDestinationFundId(transaction.destinationFundId || null);
+    if (open) {
+      if (transaction) {
+        const feeAmount =
+          transaction.type === "transfer"
+            ? allTransactions.find(
+                (t) => t.parentTransactionId === transaction.id
+              )?.amount
+            : undefined;
 
-      const feeAmount =
-        transaction.type === "transfer"
-          ? allTransactions.find(
-              (t) => t.parentTransactionId === transaction.id
-            )?.amount
-          : undefined;
-      setFee(feeAmount != null ? (feeAmount / 100).toString() : "");
-    } else {
-      setDescription("");
-      setAmount("");
-      setType("expense");
-      setDate(new Date().toISOString().split("T")[0]);
-      setCategoryId(null);
-      setSourceFundId(null);
-      setDestinationFundId(null);
-      setFee("");
+        form.reset({
+          description: transaction.description,
+          amount: (transaction.amount / 100).toString(),
+          type: transaction.type,
+          transactionDate: transaction.transactionDate.split("T")[0],
+          categoryId: transaction.categoryId || null,
+          sourceFundId: transaction.sourceFundId || null,
+          destinationFundId: transaction.destinationFundId || null,
+          fee: feeAmount != null ? (feeAmount / 100).toString() : "0",
+        });
+      } else {
+        form.reset({
+          description: "",
+          amount: "0",
+          type: "expense",
+          transactionDate: new Date().toISOString().split("T")[0],
+          categoryId: null,
+          sourceFundId: null,
+          destinationFundId: null,
+          fee: "0",
+        });
+      }
     }
-  }, [transaction, open, allTransactions]);
+  }, [transaction, open, allTransactions, form]);
 
-  // Group categories by parent for hierarchical display
   const parentCategories = categories.filter((cat) => !cat.parentId);
   const subCategories = categories.filter((cat) => cat.parentId);
   const getSubCategories = (parentId: string) =>
     subCategories.filter((sub) => sub.parentId === parentId);
 
-  const handleAmountChange = (value: string) => {
-    const numericValue = value.replace(/[^\d]/g, "");
-    setAmount(numericValue);
-  };
-
-  const handleFeeChange = (value: string) => {
-    const numericValue = value.replace(/[^\d]/g, "");
-    setFee(numericValue);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (data: TransactionFormData) => {
     if (!user) return;
 
-    const amountValue = parseCurrencyWithoutMultiplier(amount);
-    const feeValue = fee ? parseCurrencyWithoutMultiplier(fee) : 0;
+    const amountValue = parseCurrencyWithoutMultiplier(data.amount);
+    const feeValue = data.fee ? parseCurrencyWithoutMultiplier(data.fee) : 0;
 
     try {
       if (transaction) {
         await updateTransactionMutation.mutateAsync({
           id: transaction.id,
           updates: {
-            description,
+            ...data,
             amount: amountValue,
-            type,
-            transactionDate: new Date(date).toISOString(),
-            categoryId: categoryId || undefined,
-            sourceFundId: sourceFundId || undefined,
-            destinationFundId: destinationFundId || undefined,
+            transactionDate: new Date(data.transactionDate).toISOString(),
+            categoryId: data.categoryId || undefined,
+            sourceFundId: data.sourceFundId || undefined,
+            destinationFundId: data.destinationFundId || undefined,
             fee: feeValue,
           },
         });
@@ -148,14 +211,13 @@ export const TransactionDialog = ({
         });
       } else {
         await addTransactionMutation.mutateAsync({
-          description,
+          ...data,
           amount: amountValue,
-          type,
-          transactionDate: new Date(date).toISOString(),
+          transactionDate: new Date(data.transactionDate).toISOString(),
           userId: user.id,
-          categoryId: categoryId || undefined,
-          sourceFundId: sourceFundId || undefined,
-          destinationFundId: destinationFundId || undefined,
+          categoryId: data.categoryId || undefined,
+          sourceFundId: data.sourceFundId || undefined,
+          destinationFundId: data.destinationFundId || undefined,
           fee: feeValue,
         });
         toast({
@@ -164,10 +226,12 @@ export const TransactionDialog = ({
         });
       }
       onClose();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "An unexpected error occurred.";
       toast({
         title: "Transaction Failed",
-        description: error.message,
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -181,210 +245,286 @@ export const TransactionDialog = ({
             {transaction ? "Edit Transaction" : "Add Transaction"}
           </DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Input
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="e.g., Coffee with client"
-              required
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(handleSubmit)}
+            className="space-y-4"
+          >
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="e.g., Coffee with client"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-          </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="amount">Amount</Label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
-                  Rp
-                </span>
-                <Input
-                  id="amount"
-                  type="text"
-                  inputMode="numeric"
-                  className="text-right pl-8"
-                  value={formatCurrencyForInput(amount || "0")}
-                  onChange={(e) => handleAmountChange(e.target.value)}
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="type">Type</Label>
-              <Select
-                value={type}
-                onValueChange={(value) => setType(value as TransactionType)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="income">Income</SelectItem>
-                  <SelectItem value="expense">Expense</SelectItem>
-                  <SelectItem value="transfer">Transfer</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="date">Date</Label>
-            <Input
-              id="date"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              required
-            />
-          </div>
-
-          {type !== "transfer" && (
-            <div className="space-y-2">
-              <Label htmlFor="category">Category</Label>
-              <Select
-                value={categoryId || "__none"}
-                onValueChange={(value) =>
-                  setCategoryId(value === "__none" ? null : value)
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none">None</SelectItem>
-                  {parentCategories.map((parent) => (
-                    <SelectGroup key={parent.id}>
-                      <SelectLabel>{parent.name}</SelectLabel>
-                      <SelectItem value={parent.id} className="pl-6">
-                        {parent.name}
-                      </SelectItem>
-                      {getSubCategories(parent.id).map((sub) => (
-                        <SelectItem
-                          key={sub.id}
-                          value={sub.id}
-                          className="pl-8"
-                        >
-                          {sub.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {type === "transfer" ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="sourceFund">Source Fund</Label>
-                <Select
-                  value={sourceFundId || "__none"}
-                  onValueChange={(value) =>
-                    setSourceFundId(value === "__none" ? null : value)
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select source" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none">None</SelectItem>
-                    {fundSources.map((source) => (
-                      <SelectItem key={source.id} value={source.id}>
-                        {source.name} ({formatCurrency(source.balance)})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="destinationFund">Destination Fund</Label>
-                <Select
-                  value={destinationFundId || "__none"}
-                  onValueChange={(value) =>
-                    setDestinationFundId(value === "__none" ? null : value)
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select destination" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none">None</SelectItem>
-                    {fundSources.map((source) => (
-                      <SelectItem key={source.id} value={source.id}>
-                        {source.name} ({formatCurrency(source.balance)})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <Label htmlFor="fundSource">
-                {type === "income" ? "Destination Fund" : "Source Fund"}
-              </Label>
-              <Select
-                value={
-                  (type === "income" ? destinationFundId : sourceFundId) ||
-                  "__none"
-                }
-                onValueChange={(value) => {
-                  if (type === "income") {
-                    setDestinationFundId(value === "__none" ? null : value);
-                  } else {
-                    setSourceFundId(value === "__none" ? null : value);
-                  }
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={`Select ${
-                      type === "income" ? "destination" : "source"
-                    } fund`}
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none">None</SelectItem>
-                  {fundSources.map((source) => (
-                    <SelectItem key={source.id} value={source.id}>
-                      {source.name} ({formatCurrency(source.balance)})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+              <FormField
+                control={form.control}
+                name="amount"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Amount</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                          Rp
+                        </span>
+                        <Input
+                          type="text"
+                          inputMode="numeric"
+                          className="text-right pl-8"
+                          placeholder="0"
+                          {...field}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/[^\d]/g, "");
+                            field.onChange(formatCurrencyForInput(value));
+                          }}
+                          value={formatCurrencyForInput(field.value || "0")}
+                        />
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          {type === "transfer" && (
-            <div className="space-y-2">
-              <Label htmlFor="fee">Admin Fee (Optional)</Label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
-                  Rp
-                </span>
-                <Input
-                  id="fee"
-                  type="text"
-                  inputMode="numeric"
-                  className="text-right pl-8"
-                  value={formatCurrencyForInput(fee || "0")}
-                  onChange={(e) => handleFeeChange(e.target.value)}
+              <FormField
+                control={form.control}
+                name="type"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Type</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="income">Income</SelectItem>
+                        <SelectItem value="expense">Expense</SelectItem>
+                        <SelectItem value="transfer">Transfer</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control}
+              name="transactionDate"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Date</FormLabel>
+                  <FormControl>
+                    <Input type="date" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {type !== "transfer" && (
+              <FormField
+                control={form.control}
+                name="categoryId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Category</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value || "__none"}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="__none">None</SelectItem>
+                        {parentCategories.map((parent) => (
+                          <SelectGroup key={parent.id}>
+                            <SelectLabel>{parent.name}</SelectLabel>
+                            <SelectItem value={parent.id} className="pl-6">
+                              {parent.name}
+                            </SelectItem>
+                            {getSubCategories(parent.id).map((sub) => (
+                              <SelectItem
+                                key={sub.id}
+                                value={sub.id}
+                                className="pl-8"
+                              >
+                                {sub.name}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            {type === "transfer" ? (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="sourceFundId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Source Fund</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value || "__none"}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select source" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="__none">None</SelectItem>
+                          {fundSources.map((source) => (
+                            <SelectItem key={source.id} value={source.id}>
+                              {source.name} ({formatCurrency(source.balance)})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="destinationFundId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Destination Fund</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value || "__none"}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select destination" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="__none">None</SelectItem>
+                          {fundSources.map((source) => (
+                            <SelectItem key={source.id} value={source.id}>
+                              {source.name} ({formatCurrency(source.balance)})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
               </div>
-            </div>
-          )}
+            ) : (
+              <FormField
+                control={form.control}
+                name={
+                  type === "income" ? "destinationFundId" : "sourceFundId"
+                }
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      {type === "income" ? "Destination Fund" : "Source Fund"}
+                    </FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value || "__none"}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue
+                            placeholder={`Select ${
+                              type === "income" ? "destination" : "source"
+                            } fund`}
+                          />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="__none">None</SelectItem>
+                        {fundSources.map((source) => (
+                          <SelectItem key={source.id} value={source.id}>
+                            {source.name} ({formatCurrency(source.balance)})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit">{transaction ? "Update" : "Create"}</Button>
-          </div>
-        </form>
+            {type === "transfer" && (
+              <FormField
+                control={form.control}
+                name="fee"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Admin Fee (Optional)</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                          Rp
+                        </span>
+                        <Input
+                          type="text"
+                          inputMode="numeric"
+                          className="text-right pl-8"
+                          placeholder="0"
+                          {...field}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/[^\d]/g, "");
+                            field.onChange(formatCurrencyForInput(value));
+                          }}
+                          value={formatCurrencyForInput(field.value || "0")}
+                        />
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={addTransactionMutation.isPending}
+              >
+                {transaction ? "Update" : "Create"}
+              </Button>
+            </div>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );
