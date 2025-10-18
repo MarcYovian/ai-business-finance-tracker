@@ -3,7 +3,7 @@ import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { useBudgetDetails, useBudgets } from "@/hooks/useBudget";
+import { useBudgetDetails, useCurrentBudget } from "@/hooks/useBudget";
 import { formatCurrency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import { BudgetDetail } from "@/types/finance";
@@ -46,16 +46,8 @@ const BudgetPage = () => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [isDialogOpen, setDialogOpen] = useState(false);
 
-  const { data: budgets = [], isLoading: isLoadingBudgets } = useBudgets();
-
-  const currentBudget = useMemo(() => {
-    const year = currentMonth.getFullYear();
-    const month = currentMonth.getMonth();
-    return budgets.find((b) => {
-      const startDate = new Date(b.start_date + "T00:00:00");
-      return startDate.getFullYear() === year && startDate.getMonth() === month;
-    });
-  }, [currentMonth, budgets]);
+  const { data: currentBudget, isLoading: isLoadingBudgets } =
+    useCurrentBudget(currentMonth);
 
   const { data: budgetDetails = [], isLoading: isLoadingDetails } =
     useBudgetDetails(currentBudget?.id);

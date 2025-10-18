@@ -19,6 +19,7 @@ export const useAddTransaction = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       queryClient.invalidateQueries({ queryKey: ["fundSources"] });
+      queryClient.invalidateQueries({ queryKey: ["budgetDetails"] });
     },
   });
 };
@@ -37,6 +38,7 @@ export const useUpdateTransaction = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       queryClient.invalidateQueries({ queryKey: ["fundSources"] });
+      queryClient.invalidateQueries({ queryKey: ["budgetDetails"] });
     },
   });
 };
@@ -49,6 +51,7 @@ export const useDeleteTransaction = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       queryClient.invalidateQueries({ queryKey: ["fundSources"] });
+      queryClient.invalidateQueries({ queryKey: ["budgetDetails"] });
     },
   });
 };

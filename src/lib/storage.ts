@@ -1,4 +1,12 @@
-import { Category, FundSource, Transaction, User } from "@/types/finance";
+import {
+  Budget,
+  BudgetDetail,
+  BudgetItem,
+  Category,
+  FundSource,
+  Transaction,
+  User,
+} from "@/types/finance";
 import { formatCurrency } from "./currency";
 import { supabase } from "./supabase";
 
@@ -459,6 +467,75 @@ export const transactionStorage = {
 
     await fundSourceStorage.update(fromFundId, { balance: newFromBalance });
     await fundSourceStorage.update(toFundId, { balance: newToBalance });
+  },
+};
+
+type UpsertBudgetStoragePayload = Omit<Budget, "id" | "created_at"> & {
+  items: Pick<BudgetItem, "category_id" | "amount">[];
+};
+
+export const budgetStorage = {
+  upsert: async (payload: UpsertBudgetStoragePayload): Promise<void> => {
+    const itemsInCents = payload.items.map((item) => ({
+      category_id: item.category_id,
+      amount: Math.round(item.amount * 100),
+    }));
+
+    const { error } = await supabase.rpc("upsert_budget_with_items", {
+      p_user_id: payload.user_id,
+      p_start_date: payload.start_date,
+      p_end_date: payload.end_date,
+      p_name: payload.name,
+      p_items: itemsInCents,
+    });
+
+    if (error) {
+      throw error;
+    }
+  },
+
+  getOrCreateForMonth: async (
+    userId: string,
+    month: Date
+  ): Promise<Budget | null> => {
+    const startDate = new Date(
+      Date.UTC(month.getFullYear(), month.getMonth(), 1)
+    )
+      .toISOString()
+      .split("T")[0];
+
+    const { data, error } = await supabase
+      .rpc("get_or_create_budget_for_month", {
+        p_user_id: userId,
+        p_month_date: startDate,
+      })
+      .single();
+
+    if (error) {
+      console.error("Error getting or creating budget for month:", error);
+      throw error;
+    }
+
+    return data;
+  },
+
+  getDetails: async (
+    budgetId: string | null | undefined
+  ): Promise<BudgetDetail[]> => {
+    if (!budgetId) {
+      return []; // Jika tidak ada budgetId, kembalikan array kosong
+    }
+
+    const { data, error } = await supabase.rpc("get_budget_details", {
+      p_budget_id: budgetId,
+    });
+
+    if (error) {
+      console.error("Error fetching budget details:", error);
+      throw error;
+    }
+
+    return data || [];
   },
 };
 

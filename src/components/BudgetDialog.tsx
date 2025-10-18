@@ -32,7 +32,7 @@ export const BudgetDialog = ({
   const { user } = useAuth();
   const { data: categories = [], isLoading: isLoadingCategories } =
     useCategories(user.id, "expense");
-  const { mutate: upsertBudget, isLoading: isSaving } = useUpsertBudget();
+  const { mutate: upsertBudget, isPending: isSaving } = useUpsertBudget();
   const [budgetAmounts, setBudgetAmounts] = useState<Record<string, string>>(
     {}
   );
@@ -81,12 +81,17 @@ export const BudgetDialog = ({
         amount: parseInt(amountStr, 10) || 0,
       }))
       .filter((item) => item.amount > 0);
-    upsertBudget(
-      { startDate, endDate, name: budgetName, items },
-      {
-        onSuccess: () => onOpenChange(false),
-      }
-    );
+
+    const payload = {
+      name: budgetName,
+      start_date: startDate,
+      end_date: endDate,
+      items,
+    };
+
+    upsertBudget(payload, {
+      onSuccess: () => onOpenChange(false),
+    });
   };
 
   return (
