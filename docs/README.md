@@ -1,365 +1,44 @@
-# 📚 AI-Fi Finance Tracker - Documentation
+# 📚 AI Business Finance Tracker - Documentation
 
-> Complete documentation for AI-powered finance tracking application
+Welcome to the official documentation for the AI Business Finance Tracker, a modern, AI-powered application designed to help you manage your business finances with ease.
 
----
-
-## 🎯 Quick Navigation
-
-| I want to...                 | Go to...                                                |
-| ---------------------------- | ------------------------------------------------------- |
-| **Setup the project**        | [Quick Start →](getting-started/QUICK_START.md)         |
-| **Learn about AI Assistant** | [AI Assistant Guide →](features/AI_ASSISTANT_README.md) |
-| **Migrate to new version**   | [Migration Guide →](guides/MIGRATION_GUIDE.md)          |
-| **See what's new**           | [Latest Changes →](changelogs/2025-10-17_CHANGES.md)    |
-| **Fix an issue**             | [Troubleshooting →](guides/TROUBLESHOOTING.md)          |
-| **Understand architecture**  | [Technical Docs →](technical/IMPLEMENTATION_SUMMARY.md) |
+This documentation provides a comprehensive overview of the project, from initial setup to in-depth feature guides and technical references.
 
 ---
 
-## 🚀 Getting Started
+## 📂 Documentation Sections
 
-Perfect for new team members and quick setup.
+### 🚀 Getting Started
 
-- **[Quick Start Guide](getting-started/QUICK_START.md)** ⚡
-  - 5-minute setup
-  - Basic testing
-  - Common issues
-- **[Installation Guide](getting-started/INSTALLATION.md)**
-  - Detailed setup steps
-  - Environment configuration
-  - Dependencies
+New to the project? This section will guide you through the setup and installation process.
 
----
+- [**Installation Guide**](./getting-started/installation.md) - A step-by-step guide to get the project running on your local machine.
 
-## 🎯 Features Documentation
+### ✨ Features
 
-Deep dive into specific features.
+Learn about the core features of the application.
 
-### AI Assistant
+- [**Dashboard**](./features/01-dashboard.md) - An overview of the main dashboard, including summary cards and charts.
+- [**Transaction Management**](./features/02-transaction-management.md) - Detailed information on adding, editing, and deleting transactions.
+- [**AI Assistant**](./features/03-ai-assistant.md) - Discover how to use the AI assistant for natural language transaction logging.
+- [**Settings**](./features/04-settings.md) - Learn how to configure the application, manage categories, and fund sources.
 
-- **[AI Assistant Overview](features/AI_ASSISTANT_README.md)** 📖
+### 📖 Guides
 
-  - Complete guide
-  - All features
-  - Configuration
-  - Examples
+Practical guides for performing specific tasks.
 
-- **[Dynamic General Help](features/FEATURE_DYNAMIC_GENERAL_HELP.md)** 💬
-  - AI-powered conversations
-  - Personalization
-  - Context awareness
-  - Examples
+- [**Handling Transfers with Fees**](./guides/handling-transfers-with-fees.md) - A guide on how to record transfers between accounts, including administrative fees.
 
-### Core Features
+### 🔧 Technical Reference
 
-- **[Query Engine](features/QUERY_ENGINE.md)** 🔍
+For developers who want to understand the technical implementation of the project.
 
-  - 8 query types
-  - Data analysis
-  - Custom queries
+- [**Project Architecture**](./technical/01-project-architecture.md) - A high-level overview of the tech stack and project structure.
+- [**Database and RPC Functions**](./technical/02-database-and-rpc.md) - An explanation of the database schema and the role of RPC functions.
+- [**State Management**](./technical/03-state-management.md) - A look into how server state is managed using TanStack Query.
 
-- **[Transaction Management](features/TRANSACTIONS.md)** 💰
+### 📅 Changelogs
 
-  - Create, read, update, delete
-  - Validation
-  - Batch operations
+Stay up-to-date with the latest changes and new features.
 
-- **[Categories & Fund Sources](features/CATEGORIES_FUNDS.md)** 🏷️
-  - Organization
-  - Auto-creation
-  - Management
-
----
-
-## 📖 Guides
-
-Practical guides for common tasks.
-
-- **[Migration Guide](guides/MIGRATION_GUIDE.md)** 🔄
-
-  - Upgrade instructions
-  - Breaking changes
-  - Rollback plan
-
-- **[Quick Reference - Dynamic Help](guides/QUICK_REFERENCE_DYNAMIC_HELP.md)** ⚡
-
-  - Common commands
-  - Usage examples
-  - Tips & tricks
-
-- **[Troubleshooting](guides/TROUBLESHOOTING.md)** 🔧
-
-  - Common issues
-  - Solutions
-  - FAQ
-
-- **[Best Practices](guides/BEST_PRACTICES.md)** ✨
-  - Code style
-  - Patterns
-  - Tips
-
----
-
-## 🔧 Technical Documentation
-
-For developers and maintainers.
-
-- **[Implementation Summary](technical/IMPLEMENTATION_SUMMARY.md)** 🏗️
-
-  - Architecture overview
-  - File structure
-  - Key decisions
-
-- **[Architecture](technical/ARCHITECTURE.md)** 🎨
-
-  - System design
-  - Data flow
-  - Components
-
-- **[API Reference](technical/API_REFERENCE.md)** 📡
-
-  - Endpoints
-  - Types
-  - Examples
-
-- **[Performance](technical/PERFORMANCE.md)** ⚡
-  - Optimization
-  - Caching
-  - Benchmarks
-
----
-
-## 🐛 Bug Fixes
-
-Historical bug fixes and solutions.
-
-- **[Cents to Rupiah Conversion Fix](bug-fixes/BUGFIX_CENTS_CONVERSION.md)** 💵
-
-  - Problem description
-  - Root cause
-  - Solution
-  - Testing
-
-- **[Bug Fix History](bug-fixes/BUGFIX_HISTORY.md)** 📋
-  - All past fixes
-  - Lessons learned
-
----
-
-## 📅 Changelogs
-
-Track all changes and updates.
-
-### Recent
-
-- **[October 17, 2025](changelogs/2025-10-17_CHANGES.md)** 🆕
-  - UI Enhancement
-  - Bug Fix: Cents conversion
-  - Dynamic General Help
-
-### Archive
-
-- **[Full Changelog](changelogs/CHANGELOG.md)** 📜
-  - All changes
-  - Version history
-
----
-
-## 🎓 Tutorials
-
-Step-by-step learning resources.
-
-- **[Building Your First Query](tutorials/FIRST_QUERY.md)** 🎯
-- **[Customizing AI Prompts](tutorials/CUSTOM_PROMPTS.md)** 🤖
-- **[Adding New Features](tutorials/NEW_FEATURES.md)** ✨
-
----
-
-## 🧪 Testing
-
-Testing strategies and guides.
-
-- **[Testing Guide](testing/TESTING_GUIDE.md)** 🧪
-
-  - Unit tests
-  - Integration tests
-  - E2E tests
-
-- **[Test Coverage](testing/COVERAGE.md)** 📊
-  - Current coverage
-  - Goals
-  - How to improve
-
----
-
-## 🤝 Contributing
-
-Help us improve!
-
-- **[Contributing Guide](CONTRIBUTING.md)** 🤝
-
-  - How to contribute
-  - Code review process
-  - Pull request template
-
-- **[Code Style Guide](CODE_STYLE.md)** 📝
-  - Naming conventions
-  - Best practices
-  - Examples
-
----
-
-## 📊 Project Status
-
-| Component           | Status         | Documentation                           |
-| ------------------- | -------------- | --------------------------------------- |
-| AI Assistant        | ✅ Production  | [Docs](features/AI_ASSISTANT_README.md) |
-| Query Engine        | ✅ Production  | [Docs](features/QUERY_ENGINE.md)        |
-| Transaction Manager | ✅ Production  | [Docs](features/TRANSACTIONS.md)        |
-| UI Components       | ✅ Production  | [Docs](features/UI_COMPONENTS.md)       |
-| Testing             | ⚠️ In Progress | [Docs](testing/TESTING_GUIDE.md)        |
-
----
-
-## 🎯 Learning Path
-
-### For New Developers
-
-1. Read [Quick Start](getting-started/QUICK_START.md)
-2. Learn about [AI Assistant](features/AI_ASSISTANT_README.md)
-3. Understand [Architecture](technical/ARCHITECTURE.md)
-4. Review [Best Practices](guides/BEST_PRACTICES.md)
-
-### For Contributors
-
-1. Read [Contributing Guide](CONTRIBUTING.md)
-2. Check [Code Style](CODE_STYLE.md)
-3. Review recent [Changes](changelogs/CHANGELOG.md)
-4. Join development discussions
-
-### For Users
-
-1. Read [Quick Reference](guides/QUICK_REFERENCE_DYNAMIC_HELP.md)
-2. Try [Tutorials](tutorials/)
-3. Check [Troubleshooting](guides/TROUBLESHOOTING.md)
-
----
-
-## 🔍 Search Tips
-
-### By Topic
-
-- **AI**: Check [features/](features/) folder
-- **Setup**: Check [getting-started/](getting-started/) folder
-- **Issues**: Check [guides/TROUBLESHOOTING.md](guides/TROUBLESHOOTING.md)
-- **Changes**: Check [changelogs/](changelogs/) folder
-
-### By Role
-
-- **Developer**: [technical/](technical/), [guides/](guides/)
-- **Designer**: [features/UI_COMPONENTS.md](features/UI_COMPONENTS.md)
-- **QA**: [testing/](testing/), [bug-fixes/](bug-fixes/)
-- **PM**: [changelogs/](changelogs/), [features/](features/)
-
----
-
-## 📞 Support
-
-### Documentation Issues
-
-- Found a typo? [Create PR](CONTRIBUTING.md)
-- Missing docs? [Open issue](link-to-issues)
-- Unclear section? [Ask question](link-to-discussions)
-
-### Technical Support
-
-- **Email**: support@example.com
-- **Slack**: #finance-tracker-help
-- **GitHub**: [Issues](link-to-issues)
-
----
-
-## 📚 External Resources
-
-### Related Projects
-
-- [Supabase Docs](https://supabase.com/docs)
-- [React Docs](https://react.dev)
-- [TypeScript Docs](https://www.typescriptlang.org/docs/)
-
-### Learning Resources
-
-- [AI Prompt Engineering](https://www.promptingguide.ai/)
-- [React Best Practices](https://react.dev/learn)
-- [TypeScript Handbook](https://www.typescriptlang.org/docs/handbook/intro.html)
-
----
-
-## 🎉 Recent Updates
-
-| Date       | Update       | Details                               |
-| ---------- | ------------ | ------------------------------------- |
-| 2025-10-17 | Major Update | UI Enhancement, Bug Fix, Dynamic Help |
-| 2025-10-16 | Feature      | Added Query Engine                    |
-| 2025-10-15 | Improvement  | Enhanced AI prompts                   |
-
-[See full changelog →](changelogs/CHANGELOG.md)
-
----
-
-## 📈 Documentation Stats
-
-- **Total Docs**: 15+ pages
-- **Last Updated**: October 17, 2025
-- **Contributors**: [List]
-- **Languages**: English, Indonesian
-
----
-
-## 🏗️ Documentation Roadmap
-
-### Coming Soon
-
-- [ ] Video tutorials
-- [ ] Interactive examples
-- [ ] API playground
-- [ ] More translations
-
-### In Progress
-
-- [ ] Architecture diagrams
-- [ ] Performance guides
-- [ ] Advanced tutorials
-
----
-
-## ✨ Featured Docs
-
-### Most Popular
-
-1. [AI Assistant README](features/AI_ASSISTANT_README.md) - 1.2k views
-2. [Quick Start](getting-started/QUICK_START.md) - 980 views
-3. [Migration Guide](guides/MIGRATION_GUIDE.md) - 750 views
-
-### Recently Added
-
-1. [Dynamic General Help](features/FEATURE_DYNAMIC_GENERAL_HELP.md) - New!
-2. [Cents Conversion Fix](bug-fixes/BUGFIX_CENTS_CONVERSION.md) - New!
-3. [Quick Reference](guides/QUICK_REFERENCE_DYNAMIC_HELP.md) - New!
-
----
-
-## 📝 Feedback
-
-We'd love to hear from you!
-
-- **Rate this doc**: ⭐⭐⭐⭐⭐
-- **Suggest improvements**: [Open issue](link)
-- **Share your experience**: [Discussion](link)
-
----
-
-**Happy coding! 🚀**
-
-_Last updated: October 17, 2025_
+- [**v1.0.0**](./changelogs/v1.0.0.md) - The initial release of the application.
