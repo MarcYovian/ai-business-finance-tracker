@@ -5,45 +5,27 @@ import {
 } from "@/constants/constants";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
-import { parseCurrency } from "@/lib/currency";
-import {
-  enhancedCategoryStorage,
-  enhancedFundSourceStorage,
-  enhancedTransactionStorage,
-} from "@/lib/enhancedStorage";
-import { aiConfigStorage } from "@/lib/storage";
-import { AIService, AIServiceError } from "@/services/aiService";
-import {
-  AIClassification,
-  AITransactionResponse,
-  ConversationContext,
-  Message,
-  PendingTransaction,
-} from "@/types/ai";
-import {
-  getClarificationPrompt,
-  getClassifierPrompt,
-  getGeneralHelpPrompt,
-  getQueryAnswerPrompt,
-  getTransactionExtractionPrompt,
-} from "@/utils/promptTemplates";
-import { QueryEngine } from "@/utils/queryEngine";
-import {
-  validateCompleteTransaction,
-  ValidationError,
-} from "@/utils/validation";
-import { useEffect, useRef, useState } from "react";
-import { v4 as uuidv4 } from "uuid";
+import { aiAssistantService } from "@/services/aiAssistantService";
+import { AIServiceError } from "@/services/aiService";
+import { ConversationContext, Message } from "@/types/ai";
+import { ValidationError } from "@/utils/validation";
+import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { useCategories } from "./useCategories";
+import { useFundSources } from "./useFundSources";
+import { useTransactions } from "./useTransactions";
 
 export const useAIAssistant = () => {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  // Fetch data using TanStack Query
+  const { data: transactions = [] } = useTransactions(user?.id || "");
+  const { data: categories = [] } = useCategories(user?.id || "");
+  const { data: fundSources = [] } = useFundSources(user?.id || "");
+
   const [messages, setMessages] = useState<Message[]>([
-    {
-      id: uuidv4(),
-      role: "assistant",
-      content: MESSAGE_TEMPLATES.WELCOME,
-      timestamp: new Date(),
-    },
+    aiAssistantService.createMessage("assistant", MESSAGE_TEMPLATES.WELCOME),
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -58,12 +40,7 @@ export const useAIAssistant = () => {
 
   // Add user message to conversation
   const addUserMessage = (content: string) => {
-    const message: Message = {
-      id: uuidv4(),
-      role: "user",
-      content,
-      timestamp: new Date(),
-    };
+    const message = aiAssistantService.createMessage("user", content);
     setMessages((prev) => [...prev, message]);
     updateConversationContext(message);
   };
@@ -73,13 +50,11 @@ export const useAIAssistant = () => {
     content: string,
     metadata?: Message["metadata"]
   ) => {
-    const message: Message = {
-      id: uuidv4(),
-      role: "assistant",
+    const message = aiAssistantService.createMessage(
+      "assistant",
       content,
-      timestamp: new Date(),
-      metadata,
-    };
+      metadata
+    );
     setMessages((prev) => [...prev, message]);
     updateConversationContext(message);
   };
@@ -87,20 +62,12 @@ export const useAIAssistant = () => {
   // Update conversation context with message history
   const updateConversationContext = (message: Message) => {
     setConversationContext((prev) => {
-      const newMessages = [...prev.messages, message].slice(-10); // Keep last 10 messages
+      const newMessages = [...prev.messages, message].slice(-10);
       return {
         ...prev,
         messages: newMessages,
       };
     });
-  };
-
-  // Build conversation history for context
-  const buildConversationHistory = (): string => {
-    return conversationContext.messages
-      .slice(-6) // Last 6 messages for context
-      .map((m) => `${m.role}: ${m.content}`)
-      .join("\n");
   };
 
   // Main send handler
@@ -144,16 +111,11 @@ export const useAIAssistant = () => {
   const processAIResponse = async (userInput: string) => {
     if (!user) return;
 
-    const provider = aiConfigStorage.getProvider();
-    const apiKey = aiConfigStorage.getActiveKey();
-
-    if (!apiKey) {
-      addAssistantMessage(MESSAGE_TEMPLATES.API_KEY_MISSING);
-      return;
-    }
-
     // Step 1: Classify intent
-    const classification = await classifyIntent(userInput, apiKey, provider);
+    const classification = await aiAssistantService.classifyIntent(
+      userInput,
+      conversationContext
+    );
 
     if (!classification || !classification.intent) {
       addAssistantMessage(MESSAGE_TEMPLATES.UNKNOWN_INTENT);
@@ -169,16 +131,14 @@ export const useAIAssistant = () => {
     // Step 2: Route to appropriate handler
     switch (classification.intent) {
       case INTENT_TYPES.LOG_TRANSACTION:
-        await handleLogTransaction(userInput, apiKey, provider);
+        await handleLogTransaction(userInput);
         break;
 
       case INTENT_TYPES.QUERY_DATA:
         await handleQueryData(
           userInput,
           classification.query || "",
-          classification.queryType || "",
-          apiKey,
-          provider
+          classification.queryType || ""
         );
         break;
 
@@ -191,7 +151,7 @@ export const useAIAssistant = () => {
         break;
 
       case INTENT_TYPES.GENERAL_HELP:
-        handleGeneralHelp(userInput, apiKey, provider);
+        await handleGeneralHelp(userInput);
         break;
 
       default:
@@ -199,104 +159,26 @@ export const useAIAssistant = () => {
     }
   };
 
-  // Intent classification with confidence scoring
-  const classifyIntent = async (
-    userInput: string,
-    apiKey: string,
-    provider: "openai" | "gemini"
-  ): Promise<AIClassification | null> => {
-    const conversationHistory = buildConversationHistory();
-    const classifierPrompt = getClassifierPrompt(
-      userInput,
-      conversationHistory
-    );
-
-    let classificationContent: string;
-    if (provider === "gemini") {
-      classificationContent = await AIService.processWithGemini(
-        apiKey,
-        classifierPrompt
-      );
-    } else {
-      classificationContent = await AIService.processWithOpenAI(
-        apiKey,
-        classifierPrompt,
-        userInput
-      );
-    }
-
-    const classification = AIService.extractJsonFromString(
-      classificationContent
-    );
-
-    if (
-      !classification ||
-      !AIService.validateAIResponse(classification, ["intent"])
-    ) {
-      return null;
-    }
-
-    return {
-      intent: classification.intent,
-      confidence: classification.confidence || 0.5,
-      query: classification.query,
-      entities: classification.entities,
-      queryType: classification.queryType,
-    };
-  };
-
   // Handle transaction logging with validation and confirmation
-  const handleLogTransaction = async (
-    userInput: string,
-    apiKey: string,
-    provider: "openai" | "gemini"
-  ) => {
+  const handleLogTransaction = async (userInput: string) => {
     if (!user) return;
 
-    const [categories, fundSources] = await Promise.all([
-      enhancedCategoryStorage.getAll(user.id),
-      enhancedFundSourceStorage.getAll(user.id),
-    ]);
-
-    const conversationHistory = buildConversationHistory();
-    const systemPrompt = getTransactionExtractionPrompt(
+    const aiResponse = await aiAssistantService.extractTransactionData(
       userInput,
-      categories,
-      fundSources,
-      conversationHistory
+      { categories, fundSources },
+      conversationContext
     );
 
-    let aiContent: string;
-    if (provider === "gemini") {
-      aiContent = await AIService.processWithGemini(apiKey, systemPrompt);
-    } else {
-      aiContent = await AIService.processWithOpenAI(
-        apiKey,
-        systemPrompt,
-        userInput
-      );
-    }
+    const transactionArray = Array.isArray(aiResponse)
+      ? aiResponse
+      : [aiResponse];
 
-    const aiResponse: AITransactionResponse | AITransactionResponse[] | null =
-      AIService.extractJsonFromString(aiContent);
-
-    if (!aiResponse) {
-      throw new AIServiceError(
-        "AI response tidak dapat diparse sebagai JSON yang valid",
-        "INVALID_JSON",
-        true
-      );
-    }
-
-    const transactions = Array.isArray(aiResponse) ? aiResponse : [aiResponse];
-
-    for (const transaction of transactions) {
+    for (const transaction of transactionArray) {
       // Validate transaction
-      const validation = validateCompleteTransaction(
-        transaction,
+      const validation = aiAssistantService.validateTransaction(transaction, {
         categories,
-        fundSources
-      );
+        fundSources,
+      });
 
       // Check if transaction needs confirmation or clarification
       if (
@@ -304,76 +186,22 @@ export const useAIAssistant = () => {
         transaction.confidence < 0.8 ||
         transaction.missingFields?.length
       ) {
-        await handleTransactionClarification(
-          transaction,
-          validation,
-          categories,
-          fundSources
-        );
+        await handleTransactionClarification(transaction, validation);
         return;
       }
 
-      // Auto-create category if needed
-      let categoryId = transaction.category;
-      if (transaction.category && transaction.type !== "transfer") {
-        const category = await enhancedCategoryStorage.findOrCreate(
-          transaction.category,
-          user.id,
-          transaction.type as "income" | "expense"
-        );
-        categoryId = category.id;
-      }
-
-      // Auto-create fund source if needed (only for new ones with warning)
-      let fundSourceId = transaction.fundSource;
-      if (transaction.fundSource && transaction.type !== "transfer") {
-        const fundSource = await enhancedFundSourceStorage.findOrCreate(
-          transaction.fundSource,
-          user.id,
-          0
-        );
-        fundSourceId = fundSource.id;
-      }
-
-      // Handle transfer fund sources
-      let sourceFundId = transaction.sourceFund;
-      let destinationFundId = transaction.destinationFund;
-      if (transaction.type === "transfer") {
-        if (transaction.sourceFund) {
-          const sourceFund = await enhancedFundSourceStorage.findOrCreate(
-            transaction.sourceFund,
-            user.id,
-            0
-          );
-          sourceFundId = sourceFund.id;
-        }
-        if (transaction.destinationFund) {
-          const destFund = await enhancedFundSourceStorage.findOrCreate(
-            transaction.destinationFund,
-            user.id,
-            0
-          );
-          destinationFundId = destFund.id;
-        }
-      }
-
-      // Parse amount to cents
-      const amountInCents = parseCurrency(transaction.amount.toString());
-
       // Create transaction
-      await enhancedTransactionStorage.create({
-        description: transaction.description,
-        amount: amountInCents,
-        type: transaction.type,
-        transactionDate: transaction.date
-          ? new Date(transaction.date).toISOString()
-          : new Date().toISOString(),
+      await aiAssistantService.createTransaction(transaction, {
         userId: user.id,
-        categoryId: categoryId || null,
-        sourceFundId:
-          transaction.type === "transfer" ? sourceFundId : fundSourceId,
-        destinationFundId: destinationFundId || null,
+        categories,
+        fundSources,
       });
+
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["fundSources"] });
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.invalidateQueries({ queryKey: ["budgetDetails"] });
 
       // Show success message with details
       const successMessage = `✅ ${
@@ -402,19 +230,14 @@ export const useAIAssistant = () => {
 
   // Handle transaction that needs clarification
   const handleTransactionClarification = async (
-    transaction: AITransactionResponse,
-    validation: any,
-    categories: any[],
-    fundSources: any[]
+    transaction: any,
+    validation: any
   ) => {
     if (!user) return;
 
     // Store pending transaction in context
-    const pendingTransaction: PendingTransaction = {
-      id: uuidv4(),
-      ...transaction,
-      needsConfirmation: true,
-    };
+    const pendingTransaction =
+      aiAssistantService.createPendingTransaction(transaction);
 
     setConversationContext((prev) => ({
       ...prev,
@@ -453,11 +276,12 @@ export const useAIAssistant = () => {
         "\nSilakan perbaiki informasi yang kurang atau salah.";
     } else if (transaction.missingFields?.length) {
       clarificationMessage += `\n❓ Informasi yang kurang:\n${transaction.missingFields
-        .map((f) => `- ${f}`)
+        .map((f: string) => `- ${f}`)
         .join("\n")}\n`;
       clarificationMessage += "\nSilakan lengkapi informasi yang kurang.";
     } else {
-      clarificationMessage += "\nApakah informasi ini sudah benar? (Ya/Tidak)";
+      clarificationMessage +=
+        '\n\n✅ Apakah informasi ini sudah benar? Ketik "Ya" untuk konfirmasi atau "Tidak" untuk membatalkan.';
     }
 
     addAssistantMessage(clarificationMessage);
@@ -473,70 +297,43 @@ export const useAIAssistant = () => {
     const pending = conversationContext.pendingTransaction;
 
     try {
-      const [categories, fundSources] = await Promise.all([
-        enhancedCategoryStorage.getAll(user.id),
-        enhancedFundSourceStorage.getAll(user.id),
-      ]);
-
-      // Get or create category
-      let categoryId = pending.category;
-      if (pending.category && pending.type !== "transfer") {
-        const category = await enhancedCategoryStorage.findOrCreate(
-          pending.category,
-          user.id,
-          pending.type as "income" | "expense"
-        );
-        categoryId = category.id;
-      }
-
-      // Get or create fund sources
-      let fundSourceId = pending.fundSource;
-      if (pending.fundSource && pending.type !== "transfer") {
-        const fundSource = await enhancedFundSourceStorage.findOrCreate(
-          pending.fundSource,
-          user.id,
-          0
-        );
-        fundSourceId = fundSource.id;
-      }
-
-      let sourceFundId = pending.sourceFund;
-      let destinationFundId = pending.destinationFund;
-      if (pending.type === "transfer") {
-        if (pending.sourceFund) {
-          const sourceFund = await enhancedFundSourceStorage.findOrCreate(
-            pending.sourceFund,
-            user.id,
-            0
-          );
-          sourceFundId = sourceFund.id;
-        }
-        if (pending.destinationFund) {
-          const destFund = await enhancedFundSourceStorage.findOrCreate(
-            pending.destinationFund,
-            user.id,
-            0
-          );
-          destinationFundId = destFund.id;
-        }
-      }
-
-      // Parse amount to cents
-      const amountInCents = parseCurrency(pending.amount.toString());
-
-      // Create transaction
-      await enhancedTransactionStorage.create({
-        description: pending.description,
-        amount: amountInCents,
-        type: pending.type,
-        transactionDate: pending.date
-          ? new Date(pending.date).toISOString()
-          : new Date().toISOString(),
-        userId: user.id,
-        categoryId: categoryId || null,
-        sourceFundId: pending.type === "transfer" ? sourceFundId : fundSourceId,
-        destinationFundId: destinationFundId || null,
+      // First, refresh fund sources data to get the latest list
+      await queryClient.invalidateQueries({
+        queryKey: ["fundSources", user.id],
       });
+      await queryClient.invalidateQueries({
+        queryKey: ["categories", user.id],
+      });
+
+      // Wait a bit for queries to refetch
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Get fresh data
+      const freshFundSources =
+        queryClient.getQueryData<typeof fundSources>([
+          "fundSources",
+          user.id,
+        ]) || fundSources;
+      const freshCategories =
+        queryClient.getQueryData<typeof categories>(["categories", user.id]) ||
+        categories;
+
+      // Create transaction (will create missing entities automatically)
+      await aiAssistantService.createTransaction(
+        pending,
+        {
+          userId: user.id,
+          categories: freshCategories,
+          fundSources: freshFundSources,
+        },
+        true // shouldCreateMissingEntities = true
+      );
+
+      // Invalidate queries to refresh data
+      await queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      await queryClient.invalidateQueries({ queryKey: ["fundSources"] });
+      await queryClient.invalidateQueries({ queryKey: ["categories"] });
+      await queryClient.invalidateQueries({ queryKey: ["budgetDetails"] });
 
       // Clear pending transaction
       setConversationContext((prev) => ({
@@ -560,7 +357,21 @@ export const useAIAssistant = () => {
       setSuggestedPrompts(SUGGESTED_PROMPTS.QUERY);
     } catch (error: any) {
       console.error("Error confirming transaction:", error);
-      addAssistantMessage(`Gagal mengkonfirmasi transaksi: ${error.message}`);
+
+      let errorMessage = "Gagal mengkonfirmasi transaksi.";
+      if (error.message?.includes("Insufficient funds")) {
+        errorMessage = `Saldo tidak mencukupi. Pastikan sumber dana memiliki saldo yang cukup untuk transaksi ini.`;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      addAssistantMessage(errorMessage);
+
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
     }
   };
 
@@ -587,40 +398,16 @@ export const useAIAssistant = () => {
   const handleQueryData = async (
     originalQuery: string,
     query: string,
-    queryType: string,
-    apiKey: string,
-    provider: "openai" | "gemini"
+    queryType: string
   ) => {
     if (!user) return;
 
-    const [transactions, categories, fundSources] = await Promise.all([
-      enhancedTransactionStorage.getAll(user.id),
-      enhancedCategoryStorage.getAll(user.id),
-      enhancedFundSourceStorage.getAll(user.id),
-    ]);
-
-    // Use Query Engine to process the query
-    const queryEngine = new QueryEngine(transactions, categories, fundSources);
-    const queryResult = queryEngine.executeQuery(queryType);
-
-    // Generate natural language answer using AI
-    const conversationHistory = buildConversationHistory();
-    const answererPrompt = getQueryAnswerPrompt(
-      originalQuery,
-      queryResult,
-      conversationHistory
+    const finalAnswer = await aiAssistantService.executeQuery(
+      queryType,
+      { userId: user.id, transactions, categories, fundSources },
+      conversationContext,
+      originalQuery
     );
-
-    let finalAnswer: string;
-    if (provider === "gemini") {
-      finalAnswer = await AIService.processWithGemini(apiKey, answererPrompt);
-    } else {
-      finalAnswer = await AIService.processWithOpenAI(
-        apiKey,
-        answererPrompt,
-        originalQuery
-      );
-    }
 
     addAssistantMessage(finalAnswer, {
       intent: INTENT_TYPES.QUERY_DATA,
@@ -631,52 +418,20 @@ export const useAIAssistant = () => {
   };
 
   // Handle general help
-  const handleGeneralHelp = async (
-    userInput: string,
-    apiKey: string,
-    provider: "openai" | "gemini"
-  ) => {
+  const handleGeneralHelp = async (userInput: string) => {
     if (!user) return;
 
-    const [transactions, categories, fundSources] = await Promise.all([
-      enhancedTransactionStorage.getAll(user.id, false), // `false` to ensure fresh data
-      enhancedCategoryStorage.getAll(user.id),
-      enhancedFundSourceStorage.getAll(user.id),
-    ]);
-
-    const userStats = {
-      hasTransactions: transactions.length > 0,
-      hasCategories: categories.length > 0,
-      hasFundSources: fundSources.length > 0,
-      recentActivity: transactions[0]?.description || "No recent activity",
-    };
-
-    // 2. Build the prompt
-    const conversationHistory = buildConversationHistory();
-    const helpPrompt = getGeneralHelpPrompt(
+    const finalAnswer = await aiAssistantService.generateHelpResponse(
       userInput,
-      conversationHistory,
-      userStats
+      { transactions, categories, fundSources },
+      conversationContext
     );
 
-    // 3. Call the AI service
-    let finalAnswer: string;
-    if (provider === "gemini") {
-      finalAnswer = await AIService.processWithGemini(apiKey, helpPrompt);
-    } else {
-      finalAnswer = await AIService.processWithOpenAI(
-        apiKey,
-        helpPrompt,
-        userInput
-      );
-    }
-
-    // 4. Add the dynamic response to the chat
     addAssistantMessage(finalAnswer, {
       intent: INTENT_TYPES.GENERAL_HELP,
     });
 
-    // 5. Suggest next actions
+    // Suggest next actions
     setSuggestedPrompts([
       ...SUGGESTED_PROMPTS.TRANSACTION,
       ...SUGGESTED_PROMPTS.QUERY,
@@ -694,12 +449,7 @@ export const useAIAssistant = () => {
   // Clear conversation
   const clearConversation = () => {
     setMessages([
-      {
-        id: uuidv4(),
-        role: "assistant",
-        content: MESSAGE_TEMPLATES.WELCOME,
-        timestamp: new Date(),
-      },
+      aiAssistantService.createMessage("assistant", MESSAGE_TEMPLATES.WELCOME),
     ]);
     setConversationContext({
       messages: [],

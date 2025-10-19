@@ -1,300 +1,251 @@
-import {
-  ERROR_MESSAGES,
-  TRANSACTION_TYPES,
-  VALIDATION_RULES,
-} from "@/constants/constants";
 import { AITransactionResponse, ValidationResult } from "@/types/ai";
 import { Category, FundSource } from "@/types/finance";
 
 export class ValidationError extends Error {
-  constructor(message: string, public field?: string, public code?: string) {
+  constructor(message: string) {
     super(message);
     this.name = "ValidationError";
   }
 }
 
-export const validateAmount = (amount: number): ValidationResult => {
-  const errors: string[] = [];
-
-  if (typeof amount !== "number" || isNaN(amount)) {
-    errors.push(ERROR_MESSAGES.INVALID_AMOUNT);
-  } else if (amount < VALIDATION_RULES.MIN_AMOUNT) {
-    errors.push(ERROR_MESSAGES.INVALID_AMOUNT);
-  } else if (amount > VALIDATION_RULES.MAX_AMOUNT) {
-    errors.push(
-      `Jumlah terlalu besar (maksimal ${VALIDATION_RULES.MAX_AMOUNT}).`
-    );
-  }
-
-  return {
-    isValid: errors.length === 0,
-    errors,
-  };
-};
-
-export const validateDate = (dateString: string): ValidationResult => {
-  const errors: string[] = [];
-  const date = new Date(dateString);
-
-  if (isNaN(date.getTime())) {
-    errors.push(ERROR_MESSAGES.INVALID_DATE);
-  } else {
-    const now = new Date();
-    const oneYearAgo = new Date();
-    oneYearAgo.setFullYear(now.getFullYear() - 1);
-
-    if (date > now) {
-      errors.push("Tanggal tidak boleh di masa depan.");
-    } else if (date < oneYearAgo) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [
-          "Transaksi lebih dari 1 tahun yang lalu. Apakah Anda yakin?",
-        ],
-      };
-    }
-  }
-
-  return {
-    isValid: errors.length === 0,
-    errors,
-  };
-};
-
-export const validateDescription = (description: string): ValidationResult => {
-  const errors: string[] = [];
-
-  if (
-    !description ||
-    description.trim().length < VALIDATION_RULES.MIN_DESCRIPTION_LENGTH
-  ) {
-    errors.push(ERROR_MESSAGES.DESCRIPTION_TOO_SHORT);
-  } else if (description.length > VALIDATION_RULES.MAX_DESCRIPTION_LENGTH) {
-    errors.push(ERROR_MESSAGES.DESCRIPTION_TOO_LONG);
-  }
-
-  return {
-    isValid: errors.length === 0,
-    errors,
-  };
-};
-
-export const validateTransactionType = (type: string): ValidationResult => {
-  const errors: string[] = [];
-  const validTypes = Object.values(TRANSACTION_TYPES);
-
-  if (!validTypes.includes(type as any)) {
-    errors.push(ERROR_MESSAGES.INVALID_TYPE);
-  }
-
-  return {
-    isValid: errors.length === 0,
-    errors,
-  };
-};
-
-export const validateCategory = (
-  categoryName: string | undefined,
-  categories: Category[],
-  transactionType: "income" | "expense"
-): ValidationResult => {
-  const errors: string[] = [];
-  const warnings: string[] = [];
-
-  if (!categoryName) {
-    warnings.push(
-      "Kategori tidak disebutkan. Akan menggunakan kategori default."
-    );
-    return { isValid: true, errors, warnings };
-  }
-
-  const category = categories.find(
-    (c) => c.name.toLowerCase() === categoryName.toLowerCase()
-  );
-
-  if (!category) {
-    warnings.push(
-      `Kategori "${categoryName}" tidak ditemukan. Kategori baru akan dibuat.`
-    );
-  } else if (category.type !== transactionType) {
-    errors.push(
-      `Kategori "${categoryName}" adalah kategori ${category.type}, tidak cocok untuk transaksi ${transactionType}.`
-    );
-  }
-
-  return {
-    isValid: errors.length === 0,
-    errors,
-    warnings,
-  };
-};
-
-export const validateFundSource = (
-  fundSourceName: string | undefined,
-  fundSources: FundSource[]
-): ValidationResult => {
-  const errors: string[] = [];
-  const warnings: string[] = [];
-
-  if (!fundSourceName) {
-    errors.push("Sumber dana harus disebutkan.");
-    return { isValid: false, errors };
-  }
-
-  const fundSource = fundSources.find(
-    (f) => f.name.toLowerCase() === fundSourceName.toLowerCase()
-  );
-
-  if (!fundSource) {
-    errors.push(ERROR_MESSAGES.FUND_SOURCE_NOT_FOUND);
-  }
-
-  return {
-    isValid: errors.length === 0,
-    errors,
-    warnings,
-  };
-};
-
-export const validateSufficientFunds = (
-  amount: number,
-  fundSource: FundSource
-): ValidationResult => {
-  const errors: string[] = [];
-
-  if (fundSource.balance < amount) {
-    errors.push(
-      `${ERROR_MESSAGES.INSUFFICIENT_FUNDS} Saldo tersedia: ${fundSource.balance}, Diperlukan: ${amount}`
-    );
-  }
-
-  return {
-    isValid: errors.length === 0,
-    errors,
-  };
-};
-
-export const validateTransferTransaction = (
+/**
+ * Validates a transaction response from AI
+ * This is a soft validation - it allows missing entities that can be created automatically
+ */
+export function validateCompleteTransaction(
   transaction: AITransactionResponse,
+  categories: Category[],
   fundSources: FundSource[]
-): ValidationResult => {
+): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  if (!transaction.sourceFund) {
-    errors.push("Sumber dana asal harus disebutkan untuk transfer.");
+  // Validate required fields
+  if (!transaction.type) {
+    errors.push("Tipe transaksi tidak boleh kosong.");
   }
 
-  if (!transaction.destinationFund) {
-    errors.push("Sumber dana tujuan harus disebutkan untuk transfer.");
+  if (!transaction.amount || transaction.amount <= 0) {
+    errors.push("Jumlah transaksi harus lebih dari 0.");
   }
 
-  if (transaction.sourceFund && transaction.destinationFund) {
-    if (transaction.sourceFund === transaction.destinationFund) {
+  if (!transaction.description || transaction.description.trim() === "") {
+    errors.push("Deskripsi tidak boleh kosong.");
+  }
+
+  if (!transaction.date) {
+    errors.push("Tanggal transaksi tidak boleh kosong.");
+  }
+
+  // Type-specific validation
+  if (transaction.type === "expense") {
+    if (!transaction.fundSource) {
+      errors.push("Sumber dana diperlukan untuk pengeluaran.");
+    } else {
+      // Check if fund source exists
+      const fundExists = fundSources.some(
+        (f) => f.name.toLowerCase() === transaction.fundSource?.toLowerCase()
+      );
+
+      if (!fundExists) {
+        warnings.push(
+          `Sumber dana "${
+            transaction.fundSource
+          }" belum terdaftar. Sistem akan membuat sumber dana baru dengan saldo awal Rp ${transaction.amount.toLocaleString(
+            "id-ID"
+          )}.`
+        );
+      } else {
+        // Check if fund has sufficient balance
+        const fund = fundSources.find(
+          (f) => f.name.toLowerCase() === transaction.fundSource?.toLowerCase()
+        );
+
+        if (fund && fund.balance < transaction.amount * 100) {
+          warnings.push(
+            `Saldo "${
+              transaction.fundSource
+            }" tidak mencukupi. Saldo saat ini: Rp ${(
+              fund.balance / 100
+            ).toLocaleString(
+              "id-ID"
+            )}, diperlukan: Rp ${transaction.amount.toLocaleString("id-ID")}.`
+          );
+        }
+      }
+    }
+
+    // Check category (optional warning)
+    if (transaction.category) {
+      const categoryExists = categories.some(
+        (c) =>
+          c.name.toLowerCase() === transaction.category?.toLowerCase() &&
+          c.type === "expense"
+      );
+
+      if (!categoryExists) {
+        warnings.push(
+          `Kategori "${transaction.category}" belum terdaftar. Sistem akan membuat kategori baru.`
+        );
+      }
+    }
+  } else if (transaction.type === "income") {
+    if (!transaction.destinationFund && !transaction.fundSource) {
+      errors.push("Sumber dana tujuan diperlukan untuk pemasukan.");
+    }
+
+    // For income, we accept fundSource as destination
+    const destinationName =
+      transaction.destinationFund || transaction.fundSource;
+
+    if (destinationName) {
+      const fundExists = fundSources.some(
+        (f) => f.name.toLowerCase() === destinationName.toLowerCase()
+      );
+
+      if (!fundExists) {
+        warnings.push(
+          `Sumber dana "${destinationName}" belum terdaftar. Sistem akan membuat sumber dana baru.`
+        );
+      }
+    }
+
+    // Check category (optional warning)
+    if (transaction.category) {
+      const categoryExists = categories.some(
+        (c) =>
+          c.name.toLowerCase() === transaction.category?.toLowerCase() &&
+          c.type === "income"
+      );
+
+      if (!categoryExists) {
+        warnings.push(
+          `Kategori "${transaction.category}" belum terdaftar. Sistem akan membuat kategori baru.`
+        );
+      }
+    }
+  } else if (transaction.type === "transfer") {
+    if (!transaction.sourceFund) {
+      errors.push("Sumber dana asal diperlukan untuk transfer.");
+    }
+
+    if (!transaction.destinationFund) {
+      errors.push("Sumber dana tujuan diperlukan untuk transfer.");
+    }
+
+    if (
+      transaction.sourceFund &&
+      transaction.destinationFund &&
+      transaction.sourceFund.toLowerCase() ===
+        transaction.destinationFund.toLowerCase()
+    ) {
       errors.push("Sumber dana asal dan tujuan tidak boleh sama.");
     }
 
-    const sourceFund = fundSources.find(
-      (f) => f.name.toLowerCase() === transaction.sourceFund?.toLowerCase()
-    );
-    const destFund = fundSources.find(
-      (f) => f.name.toLowerCase() === transaction.destinationFund?.toLowerCase()
-    );
-
-    if (!sourceFund) {
-      errors.push(`Sumber dana "${transaction.sourceFund}" tidak ditemukan.`);
-    } else {
-      const sufficientFundsCheck = validateSufficientFunds(
-        transaction.amount,
-        sourceFund
+    // Check if funds exist
+    if (transaction.sourceFund) {
+      const sourceFundExists = fundSources.some(
+        (f) => f.name.toLowerCase() === transaction.sourceFund?.toLowerCase()
       );
-      errors.push(...sufficientFundsCheck.errors);
-    }
 
-    if (!destFund) {
-      errors.push(
-        `Sumber dana "${transaction.destinationFund}" tidak ditemukan.`
-      );
-    }
-  }
-
-  return {
-    isValid: errors.length === 0,
-    errors,
-    warnings,
-  };
-};
-
-export const validateCompleteTransaction = (
-  transaction: AITransactionResponse,
-  categories: Category[],
-  fundSources: FundSource[]
-): ValidationResult => {
-  const allErrors: string[] = [];
-  const allWarnings: string[] = [];
-
-  // Validate amount
-  const amountValidation = validateAmount(transaction.amount);
-  allErrors.push(...amountValidation.errors);
-
-  // Validate description
-  const descriptionValidation = validateDescription(transaction.description);
-  allErrors.push(...descriptionValidation.errors);
-
-  // Validate date
-  const dateValidation = validateDate(transaction.date);
-  allErrors.push(...dateValidation.errors);
-  if (dateValidation.warnings) allWarnings.push(...dateValidation.warnings);
-
-  // Validate transaction type
-  const typeValidation = validateTransactionType(transaction.type);
-  allErrors.push(...typeValidation.errors);
-
-  // Type-specific validations
-  if (transaction.type === "transfer") {
-    const transferValidation = validateTransferTransaction(
-      transaction,
-      fundSources
-    );
-    allErrors.push(...transferValidation.errors);
-    if (transferValidation.warnings)
-      allWarnings.push(...transferValidation.warnings);
-  } else {
-    // Validate category for income/expense
-    const categoryValidation = validateCategory(
-      transaction.category,
-      categories,
-      transaction.type
-    );
-    allErrors.push(...categoryValidation.errors);
-    if (categoryValidation.warnings)
-      allWarnings.push(...categoryValidation.warnings);
-
-    // Validate fund source
-    const fundSourceValidation = validateFundSource(
-      transaction.fundSource,
-      fundSources
-    );
-    allErrors.push(...fundSourceValidation.errors);
-
-    if (transaction.type === "expense" && transaction.fundSource) {
-      const fundSource = fundSources.find(
-        (f) => f.name.toLowerCase() === transaction.fundSource?.toLowerCase()
-      );
-      if (fundSource) {
-        const sufficientFundsValidation = validateSufficientFunds(
-          transaction.amount,
-          fundSource
+      if (!sourceFundExists) {
+        warnings.push(
+          `Sumber dana "${
+            transaction.sourceFund
+          }" belum terdaftar. Sistem akan membuat sumber dana baru dengan saldo Rp ${transaction.amount.toLocaleString(
+            "id-ID"
+          )}.`
         );
-        allErrors.push(...sufficientFundsValidation.errors);
+      } else {
+        // Check if source fund has sufficient balance
+        const fund = fundSources.find(
+          (f) => f.name.toLowerCase() === transaction.sourceFund?.toLowerCase()
+        );
+
+        if (fund && fund.balance < transaction.amount * 100) {
+          warnings.push(
+            `Saldo "${
+              transaction.sourceFund
+            }" tidak mencukupi. Saldo saat ini: Rp ${(
+              fund.balance / 100
+            ).toLocaleString(
+              "id-ID"
+            )}, diperlukan: Rp ${transaction.amount.toLocaleString("id-ID")}.`
+          );
+        }
+      }
+    }
+
+    if (transaction.destinationFund) {
+      const destFundExists = fundSources.some(
+        (f) =>
+          f.name.toLowerCase() === transaction.destinationFund?.toLowerCase()
+      );
+
+      if (!destFundExists) {
+        warnings.push(
+          `Sumber dana tujuan "${transaction.destinationFund}" belum terdaftar. Sistem akan membuat sumber dana baru.`
+        );
       }
     }
   }
 
   return {
-    isValid: allErrors.length === 0,
-    errors: allErrors,
-    warnings: allWarnings.length > 0 ? allWarnings : undefined,
+    isValid: errors.length === 0,
+    errors,
+    warnings,
   };
-};
+}
+
+/**
+ * Validates if a transaction has all required fields filled
+ */
+export function isTransactionComplete(
+  transaction: AITransactionResponse
+): boolean {
+  const hasBasicFields =
+    !!transaction.type &&
+    !!transaction.amount &&
+    transaction.amount > 0 &&
+    !!transaction.description &&
+    !!transaction.date;
+
+  if (!hasBasicFields) return false;
+
+  if (transaction.type === "expense") {
+    return !!transaction.fundSource;
+  } else if (transaction.type === "income") {
+    return !!(transaction.destinationFund || transaction.fundSource);
+  } else if (transaction.type === "transfer") {
+    return !!transaction.sourceFund && !!transaction.destinationFund;
+  }
+
+  return false;
+}
+
+/**
+ * Gets missing fields from a transaction
+ */
+export function getMissingFields(transaction: AITransactionResponse): string[] {
+  const missing: string[] = [];
+
+  if (!transaction.type) missing.push("type");
+  if (!transaction.amount || transaction.amount <= 0) missing.push("amount");
+  if (!transaction.description) missing.push("description");
+  if (!transaction.date) missing.push("date");
+
+  if (transaction.type === "expense" && !transaction.fundSource) {
+    missing.push("fundSource");
+  } else if (
+    transaction.type === "income" &&
+    !transaction.destinationFund &&
+    !transaction.fundSource
+  ) {
+    missing.push("destinationFund");
+  } else if (transaction.type === "transfer") {
+    if (!transaction.sourceFund) missing.push("sourceFund");
+    if (!transaction.destinationFund) missing.push("destinationFund");
+  }
+
+  return missing;
+}
