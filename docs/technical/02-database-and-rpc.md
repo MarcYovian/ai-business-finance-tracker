@@ -8,38 +8,76 @@ This document details the database schema used in the AI Business Finance Tracke
 
 ## 2. Database Schema
 
-The database is hosted on Supabase (PostgreSQL). The key tables are `transactions`, `categories`, and `fund_sources`.
+The database is hosted on Supabase (PostgreSQL). The key tables are `transactions`, `categories`, `fund_sources`, `budgets`, and `budget_items`.
 
 ### a. `transactions` Table
 
 This is the central table that stores all financial movements.
 
-| Column              | Type      | Description                                                                                      |
-| ------------------- | --------- | ------------------------------------------------------------------------------------------------ |
-| `id`                | `uuid`    | Primary key for the transaction.                                                                 |
-| `user_id`           | `uuid`    | Foreign key linking to the `auth.users` table.                                                   |
-| `description`       | `text`    | A user-provided description of the transaction.                                                  |
-| `amount`            | `integer` | The monetary value of the transaction, stored in cents to avoid floating-point inaccuracies.     |
-| `type`              | `enum`    | The type of transaction: `income`, `expense`, or `transfer`.                                     |
-| `transaction_date`  | `timestamptz` | The date and time the transaction occurred.                                                    |
-| `category_id`       | `uuid`    | Foreign key linking to the `categories` table. Nullable.                                         |
-| `source_fund_id`    | `uuid`    | Foreign key to `fund_sources`. Used for `expense` and `transfer` types.                          |
-| `destination_fund_id` | `uuid`    | Foreign key to `fund_sources`. Used for `income` and `transfer` types.                           |
-| `parent_transaction_id` | `uuid`    | **Crucial field**. Links a transaction to a parent. Used to associate a fee with a transfer. |
-| `created_at`        | `timestamptz` | Timestamp of when the record was created.                                                      |
+| Column                | Type          | Description                                                                                                |
+| --------------------- | ------------- | ---------------------------------------------------------------------------------------------------------- |
+| `id`                  | `uuid`        | Primary key for the transaction.                                                                           |
+| `description`         | `text`        | A user-provided description of the transaction. Nullable.                                                  |
+| `amount`              | `bigint`      | The monetary value, stored in cents to avoid floating-point inaccuracies.                                  |
+| `type`                | `text`        | The type of transaction: `income`, `expense`, or `transfer`.                                               |
+| `transaction_date`    | `timestamptz` | The date and time the transaction occurred.                                                                |
+| `user_id`             | `uuid`        | Foreign key to `auth.users`. Automatically links the transaction to the logged-in user.                    |
+| `category_id`         | `uuid`        | Foreign key to `categories`. `ON DELETE SET NULL`.                                                         |
+| `created_at`          | `timestamptz` | Timestamp of when the record was created.                                                                  |
+| `source_fund_id`      | `uuid`        | Foreign key to `fund_sources`. Used for `expense` and `transfer` types.                                    |
+| `destination_fund_id` | `uuid`        | Foreign key to `fund_sources`. Used for `income` and `transfer` types.                                     |
+| `parent_transaction_id` | `uuid`        | Links a transaction to a parent (e.g., a fee to a transfer). `ON DELETE SET NULL`.                         |
 
-#### The `parent_transaction_id` Relationship
+### b. `fund_sources` Table
 
-When a transfer includes an administrative fee, two transactions are created:
-1.  A `transfer` transaction for the main amount.
-2.  An `expense` transaction for the fee amount.
+Stores the user's financial accounts (e.g., bank accounts, cash).
 
-The `parent_transaction_id` of the fee transaction is set to the `id` of the main transfer transaction, creating a clear link between them.
+| Column       | Type          | Description                                                                      |
+| ------------ | ------------- | -------------------------------------------------------------------------------- |
+| `id`         | `uuid`        | Primary key for the fund source.                                                 |
+| `name`       | `text`        | The name of the fund source (e.g., "BCA", "GoPay").                              |
+| `balance`    | `bigint`      | The current balance of the account, stored in cents.                             |
+| `user_id`    | `uuid`        | Foreign key to `auth.users`.                                                     |
+| `created_at` | `timestamptz` | Timestamp of when the record was created.                                        |
+| `type`       | `text`        | The type of fund source. Check constraint limits to: `bank`, `cash`, or `other`. |
 
-### b. `categories` and `fund_sources` Tables
+### c. `categories` Table
 
--   **`categories`**: Stores user-defined categories for income and expenses. It supports a hierarchical structure with a `parent_id` column.
--   **`fund_sources`**: Stores the user's financial accounts (e.g., bank accounts, cash) and their current balances.
+Stores user-defined categories for income and expenses.
+
+| Column      | Type          | Description                                                                    |
+| ----------- | ------------- | ------------------------------------------------------------------------------ |
+| `id`        | `uuid`        | Primary key for the category.                                                  |
+| `name`      | `text`        | The name of the category (e.g., "Food", "Salary").                             |
+| `user_id`   | `uuid`        | Foreign key to `auth.users`.                                                   |
+| `created_at`| `timestamptz` | Timestamp of when the record was created.                                      |
+| `type`      | `text`        | The type of category. Check constraint limits to: `income` or `expense`.       |
+| `parent_id` | `uuid`        | Self-referencing foreign key to support hierarchical/nested categories.        |
+
+### d. `budgets` Table
+
+Defines a budget period for a user.
+
+| Column       | Type          | Description                                                              |
+| ------------ | ------------- | ------------------------------------------------------------------------ |
+| `id`         | `uuid`        | Primary key for the budget.                                              |
+| `user_id`    | `uuid`        | Foreign key to `auth.users`.                                             |
+| `name`       | `text`        | The name of the budget (e.g., "October 2025 Budget").                    |
+| `start_date` | `date`        | The start date of the budget period.                                     |
+| `end_date`   | `date`        | The end date of the budget period.                                       |
+| `created_at` | `timestamptz` | Timestamp of when the record was created.                                |
+
+### e. `budget_items` Table
+
+Links categories to a specific budget with an allocated amount.
+
+| Column      | Type          | Description                                                              |
+| ----------- | ------------- | ------------------------------------------------------------------------ |
+| `id`        | `uuid`        | Primary key for the budget item.                                         |
+| `budget_id` | `uuid`        | Foreign key to the `budgets` table.                                      |
+| `category_id`| `uuid`        | Foreign key to the `categories` table.                                   |
+| `amount`    | `bigint`      | The budgeted amount for the linked category, stored in cents.            |
+| `created_at`| `timestamptz` | Timestamp of when the record was created.                                |
 
 ---
 
