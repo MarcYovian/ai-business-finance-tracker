@@ -41,6 +41,7 @@ For developers who want to understand the technical implementation of the projec
 - [**Application Constants**](./technical/07-application-constants.md) - A reference for the application-wide constants.
 - [**Prompt Engineering**](./technical/08-prompt-engineering.md) - A guide to the prompt engineering strategies used for the AI assistant.
 - [**Query Engine**](./technical/09-query-engine.md) - An overview of the query engine used by the AI assistant.
+- [**RPC Functions Reference**](./technical/10-rpc-functions-reference.md) - A detailed reference for all custom RPC functions.
 
 ### 📅 Changelogs
 

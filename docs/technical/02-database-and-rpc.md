@@ -84,3 +84,7 @@ This function is called to delete a transaction.
     2.  It reverts the impact of this transaction on the fund source balances.
     3.  It checks if any other transaction (i.e., a fee) has this transaction as its `parent_transaction_id`. If so, it also reverts the fee's impact and deletes the fee transaction.
     4.  It deletes the main transaction record.
+
+---
+
+For a more detailed reference on each RPC function, including parameters and SQL definitions, see the [RPC Functions Reference](./10-rpc-functions-reference.md).
