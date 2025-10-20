@@ -1,21 +1,37 @@
-import { QUERY_TYPES } from "@/constants/constants";
+import {
+  BUDGET_STATUS,
+  BUDGET_THRESHOLDS,
+  QUERY_TYPES,
+} from "@/constants/constants";
 import { formatCurrency } from "@/lib/currency";
 import { QueryResult } from "@/types/ai";
-import { Category, FundSource, Transaction } from "@/types/finance";
+import {
+  Budget,
+  BudgetDetail,
+  Category,
+  FundSource,
+  Transaction,
+} from "@/types/finance";
 
 export class QueryEngine {
   private transactions: Transaction[];
   private categories: Category[];
   private fundSources: FundSource[];
+  private budgetDetails?: BudgetDetail[];
+  private currentBudget?: Budget | null;
 
   constructor(
     transactions: Transaction[],
     categories: Category[],
-    fundSources: FundSource[]
+    fundSources: FundSource[],
+    budgetDetails?: BudgetDetail[],
+    currentBudget?: Budget | null
   ) {
     this.transactions = transactions;
     this.categories = categories;
     this.fundSources = fundSources;
+    this.budgetDetails = budgetDetails;
+    this.currentBudget = currentBudget;
   }
 
   // Helper to convert cents to rupiah for display
@@ -28,9 +44,66 @@ export class QueryEngine {
     return formatCurrency(cents);
   }
 
+  // Helper to determine budget status
+  private getBudgetStatus(utilization: number): string {
+    if (utilization >= 1.0) return BUDGET_STATUS.OVER;
+    if (utilization >= BUDGET_THRESHOLDS.DANGER) return BUDGET_STATUS.DANGER;
+    if (utilization >= BUDGET_THRESHOLDS.WARNING) return BUDGET_STATUS.WARNING;
+    return BUDGET_STATUS.SAFE;
+  }
+
+  // Helper to get status emoji
+  private getStatusEmoji(status: string): string {
+    switch (status) {
+      case BUDGET_STATUS.SAFE:
+        return "✅";
+      case BUDGET_STATUS.WARNING:
+        return "⚠️";
+      case BUDGET_STATUS.DANGER:
+        return "🟠";
+      case BUDGET_STATUS.OVER:
+        return "🔴";
+      default:
+        return "ℹ️";
+    }
+  }
+
   // Detect query type from user input
   detectQueryType(query: string): string {
     const lowerQuery = query.toLowerCase();
+
+    // Budget-related queries
+    if (lowerQuery.includes("budget") || lowerQuery.includes("anggaran")) {
+      if (
+        lowerQuery.includes("overview") ||
+        lowerQuery.includes("status") ||
+        lowerQuery.includes("ringkasan")
+      ) {
+        return QUERY_TYPES.BUDGET_OVERVIEW;
+      }
+      if (
+        lowerQuery.includes("over") ||
+        lowerQuery.includes("exceed") ||
+        lowerQuery.includes("melebihi")
+      ) {
+        return QUERY_TYPES.OVER_BUDGET_CATEGORIES;
+      }
+      if (
+        lowerQuery.includes("recommendation") ||
+        lowerQuery.includes("suggest") ||
+        lowerQuery.includes("saran")
+      ) {
+        return QUERY_TYPES.BUDGET_RECOMMENDATIONS;
+      }
+      if (
+        lowerQuery.includes("vs") ||
+        lowerQuery.includes("actual") ||
+        lowerQuery.includes("compare")
+      ) {
+        return QUERY_TYPES.BUDGET_VS_ACTUAL;
+      }
+      return QUERY_TYPES.BUDGET_OVERVIEW;
+    }
 
     if (
       lowerQuery.includes("total expense") ||
@@ -124,6 +197,14 @@ export class QueryEngine {
         return this.getCategoryBreakdown();
       case QUERY_TYPES.SPENDING_TREND:
         return this.getSpendingTrend();
+      case QUERY_TYPES.BUDGET_OVERVIEW:
+        return this.getBudgetOverview();
+      case QUERY_TYPES.OVER_BUDGET_CATEGORIES:
+        return this.getOverBudgetCategories();
+      case QUERY_TYPES.BUDGET_RECOMMENDATIONS:
+        return this.getBudgetRecommendations();
+      case QUERY_TYPES.BUDGET_VS_ACTUAL:
+        return this.getBudgetVsActual();
       default:
         return this.getTotalExpensesThisMonth();
     }
@@ -476,6 +557,305 @@ export class QueryEngine {
         averageCents
       )}\nBulan ini ${trend} rata-rata.`,
       visualizationData: last6Months,
+    };
+  }
+
+  private getBudgetOverview(): QueryResult {
+    if (!this.budgetDetails || !this.budgetDetails.length) {
+      return {
+        type: QUERY_TYPES.BUDGET_OVERVIEW,
+        data: { noBudget: true },
+        summary:
+          "📊 Belum ada budget yang ditetapkan untuk bulan ini.\n\n💡 Tip: Anda bisa membuat budget berdasarkan pola pengeluaran historis Anda!",
+      };
+    }
+
+    const summary = this.budgetDetails.map((detail) => {
+      const spent = detail.spent / 100;
+      const budget = detail.amount / 100;
+      const remaining = budget - spent;
+      const utilization = spent / budget;
+      const status = this.getBudgetStatus(utilization);
+      const emoji = this.getStatusEmoji(status);
+
+      return {
+        category: detail.category_name,
+        budget: budget,
+        spent: spent,
+        remaining: remaining,
+        utilization: (utilization * 100).toFixed(1),
+        status: status,
+        emoji: emoji,
+      };
+    });
+
+    const totalBudget = summary.reduce((sum, s) => sum + s.budget, 0);
+    const totalSpent = summary.reduce((sum, s) => sum + s.spent, 0);
+    const totalRemaining = totalBudget - totalSpent;
+    const overallUtilization = (totalSpent / totalBudget) * 100;
+    const overallStatus = this.getBudgetStatus(totalSpent / totalBudget);
+
+    // Count statuses
+    const statusCounts = {
+      safe: summary.filter((s) => s.status === BUDGET_STATUS.SAFE).length,
+      warning: summary.filter((s) => s.status === BUDGET_STATUS.WARNING).length,
+      danger: summary.filter((s) => s.status === BUDGET_STATUS.DANGER).length,
+      over: summary.filter((s) => s.status === BUDGET_STATUS.OVER).length,
+    };
+
+    let statusSummary = "";
+    if (statusCounts.over > 0) {
+      statusSummary = `\n\n🔴 Peringatan: ${statusCounts.over} kategori melebihi budget!`;
+    } else if (statusCounts.danger > 0) {
+      statusSummary = `\n\n🟠 Perhatian: ${statusCounts.danger} kategori hampir habis (>95%)`;
+    } else if (statusCounts.warning > 0) {
+      statusSummary = `\n\n⚠️ ${statusCounts.warning} kategori perlu diperhatikan (>80%)`;
+    } else {
+      statusSummary = "\n\n✅ Semua kategori dalam kondisi aman!";
+    }
+
+    return {
+      type: QUERY_TYPES.BUDGET_OVERVIEW,
+      data: {
+        categories: summary,
+        totalBudget,
+        totalSpent,
+        totalRemaining,
+        overallUtilization: overallUtilization.toFixed(1),
+        overallStatus,
+        statusCounts,
+      },
+      summary: `📊 **Status Budget Bulan Ini**\n\n${summary
+        .map(
+          (s) =>
+            `${s.emoji} **${s.category}**\n   ${this.formatAmount(
+              s.spent * 100
+            )} / ${this.formatAmount(s.budget * 100)} (${
+              s.utilization
+            }%)\n   Sisa: ${this.formatAmount(s.remaining * 100)}`
+        )
+        .join("\n\n")}\n\n━━━━━━━━━━━━━━━━━━━━\n**TOTAL**\n${this.formatAmount(
+        totalSpent * 100
+      )} / ${this.formatAmount(
+        totalBudget * 100
+      )} (${overallUtilization.toFixed(1)}%)\nSisa: ${this.formatAmount(
+        totalRemaining * 100
+      )}${statusSummary}`,
+      visualizationData: summary,
+    };
+  }
+
+  private getOverBudgetCategories(): QueryResult {
+    if (!this.budgetDetails || !this.budgetDetails.length) {
+      return {
+        type: QUERY_TYPES.OVER_BUDGET_CATEGORIES,
+        data: { noBudget: true },
+        summary: "Belum ada budget yang ditetapkan untuk bulan ini.",
+      };
+    }
+
+    const overBudget = this.budgetDetails
+      .filter((detail) => detail.spent > detail.amount)
+      .map((detail) => ({
+        category: detail.category_name,
+        budget: detail.amount / 100,
+        spent: detail.spent / 100,
+        excess: (detail.spent - detail.amount) / 100,
+        percentage: ((detail.spent / detail.amount) * 100).toFixed(1),
+      }))
+      .sort((a, b) => b.excess - a.excess);
+
+    if (overBudget.length === 0) {
+      return {
+        type: QUERY_TYPES.OVER_BUDGET_CATEGORIES,
+        data: { categories: [] },
+        summary:
+          "🎉 **Selamat!**\n\nTidak ada kategori yang melebihi budget. Anda berhasil mengelola keuangan dengan baik bulan ini!\n\n💡 Tip: Pertahankan kebiasaan baik ini dan terus pantau pengeluaran Anda secara berkala.",
+      };
+    }
+
+    const totalExcess = overBudget.reduce((sum, c) => sum + c.excess, 0);
+
+    return {
+      type: QUERY_TYPES.OVER_BUDGET_CATEGORIES,
+      data: { categories: overBudget, totalExcess },
+      summary: `🔴 **Kategori Over Budget**\n\n${
+        overBudget.length
+      } kategori melebihi budget:\n\n${overBudget
+        .map(
+          (c, i) =>
+            `${i + 1}. **${c.category}**\n   Budget: ${this.formatAmount(
+              c.budget * 100
+            )}\n   Pengeluaran: ${this.formatAmount(c.spent * 100)} (${
+              c.percentage
+            }%)\n   Kelebihan: ${this.formatAmount(c.excess * 100)}`
+        )
+        .join(
+          "\n\n"
+        )}\n\n━━━━━━━━━━━━━━━━━━━━\n**Total Kelebihan:** ${this.formatAmount(
+        totalExcess * 100
+      )}\n\n💡 **Saran:** Kurangi pengeluaran di kategori ini bulan depan atau tingkatkan budget sesuai kebutuhan riil Anda.`,
+      visualizationData: overBudget,
+    };
+  }
+
+  private getBudgetRecommendations(): QueryResult {
+    if (!this.transactions.length) {
+      return {
+        type: QUERY_TYPES.BUDGET_RECOMMENDATIONS,
+        data: { noData: true },
+        summary:
+          "Belum ada data transaksi untuk memberikan rekomendasi budget.\n\nMulai catat transaksi Anda terlebih dahulu!",
+      };
+    }
+
+    // Analyze last 3 months of expenses
+    const now = new Date();
+    const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+
+    const expensesByCategory = this.transactions
+      .filter(
+        (t) =>
+          t.type === "expense" &&
+          t.categoryId &&
+          new Date(t.transactionDate) >= threeMonthsAgo
+      )
+      .reduce((acc, t) => {
+        const category = this.categories.find((c) => c.id === t.categoryId);
+        if (category) {
+          if (!acc[category.name]) {
+            acc[category.name] = { total: 0, count: 0, months: new Set() };
+          }
+          acc[category.name].total += t.amount;
+          acc[category.name].count += 1;
+          const month = new Date(t.transactionDate).getMonth();
+          acc[category.name].months.add(month);
+        }
+        return acc;
+      }, {} as Record<string, { total: number; count: number; months: Set<number> }>);
+
+    const recommendations = Object.entries(expensesByCategory)
+      .map(([name, data]) => {
+        const monthCount = data.months.size || 1;
+        const avgMonthly = data.total / monthCount;
+        // Add 10% buffer for safety
+        const recommended = Math.ceil((avgMonthly * 1.1) / 100) * 100;
+
+        return {
+          category: name,
+          average: this.centsToRupiah(avgMonthly),
+          recommended: this.centsToRupiah(recommended),
+          recommendedCents: recommended,
+          transactionCount: data.count,
+          monthsAnalyzed: monthCount,
+        };
+      })
+      .sort((a, b) => b.recommendedCents - a.recommendedCents);
+
+    const totalRecommended = recommendations.reduce(
+      (sum, r) => sum + r.recommendedCents,
+      0
+    );
+
+    return {
+      type: QUERY_TYPES.BUDGET_RECOMMENDATIONS,
+      data: {
+        recommendations,
+        totalRecommended: this.centsToRupiah(totalRecommended),
+        totalRecommendedCents: totalRecommended,
+        analysisMonths: 3,
+      },
+      summary: `💡 **Rekomendasi Budget (berdasarkan 3 bulan terakhir)**\n\n${recommendations
+        .map(
+          (r, i) =>
+            `${i + 1}. **${r.category}**\n   Rata-rata: ${this.formatAmount(
+              r.average * 100
+            )}/bulan\n   Direkomendasikan: ${this.formatAmount(
+              r.recommendedCents
+            )}\n   (${r.transactionCount} transaksi dalam ${
+              r.monthsAnalyzed
+            } bulan)`
+        )
+        .join(
+          "\n\n"
+        )}\n\n━━━━━━━━━━━━━━━━━━━━\n**Total Budget Direkomendasikan:** ${this.formatAmount(
+        totalRecommended
+      )}\n\n📝 Budget ini sudah termasuk buffer 10% untuk mengantisipasi pengeluaran tak terduga.`,
+      visualizationData: recommendations,
+    };
+  }
+
+  private getBudgetVsActual(): QueryResult {
+    if (!this.budgetDetails || !this.budgetDetails.length) {
+      return {
+        type: QUERY_TYPES.BUDGET_VS_ACTUAL,
+        data: { noBudget: true },
+        summary: "Belum ada budget yang ditetapkan untuk bulan ini.",
+      };
+    }
+
+    const comparison = this.budgetDetails.map((detail) => {
+      const budget = detail.amount / 100;
+      const actual = detail.spent / 100;
+      const difference = actual - budget;
+      const variance = budget > 0 ? (difference / budget) * 100 : 0;
+      const status =
+        actual > budget ? "over" : actual > budget * 0.8 ? "warning" : "safe";
+
+      return {
+        category: detail.category_name,
+        budget,
+        actual,
+        difference: Math.abs(difference),
+        variance: variance.toFixed(1),
+        status,
+        emoji: this.getStatusEmoji(status),
+      };
+    });
+
+    const totalBudget = comparison.reduce((sum, c) => sum + c.budget, 0);
+    const totalActual = comparison.reduce((sum, c) => sum + c.actual, 0);
+    const totalDifference = totalActual - totalBudget;
+    const totalVariance =
+      totalBudget > 0
+        ? ((totalDifference / totalBudget) * 100).toFixed(1)
+        : "0";
+
+    const overCount = comparison.filter((c) => c.status === "over").length;
+    const underCount = comparison.filter((c) => c.status === "safe").length;
+
+    return {
+      type: QUERY_TYPES.BUDGET_VS_ACTUAL,
+      data: {
+        comparison,
+        totalBudget,
+        totalActual,
+        totalDifference: Math.abs(totalDifference),
+        totalVariance,
+        overCount,
+        underCount,
+      },
+      summary: `📊 **Budget vs Pengeluaran Aktual**\n\n${comparison
+        .map(
+          (c) =>
+            `${c.emoji} **${c.category}**\n   Budget: ${this.formatAmount(
+              c.budget * 100
+            )}\n   Aktual: ${this.formatAmount(
+              c.actual * 100
+            )}\n   Selisih: ${this.formatAmount(c.difference * 100)} (${
+              c.variance > 0 ? "+" : ""
+            }${c.variance}%)`
+        )
+        .join(
+          "\n\n"
+        )}\n\n━━━━━━━━━━━━━━━━━━━━\n**TOTAL**\nBudget: ${this.formatAmount(
+        totalBudget * 100
+      )}\nAktual: ${this.formatAmount(
+        totalActual * 100
+      )}\nSelisih: ${this.formatAmount(Math.abs(totalDifference) * 100)} (${
+        totalVariance > 0 ? "+" : ""
+      }${totalVariance}%)\n\n📈 **Ringkasan:**\n- ${underCount} kategori di bawah budget\n- ${overCount} kategori melebihi budget`,
+      visualizationData: comparison,
     };
   }
 }

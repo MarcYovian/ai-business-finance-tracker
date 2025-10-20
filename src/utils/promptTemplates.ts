@@ -16,20 +16,27 @@ export const getClassifierPrompt = (
 
   ${contextSection}
 
-  IMPORTANT RULE: If the user's input contains both a greeting (like "hello", "apa kabar") AND a specific financial question, the primary intent MUST be "query_data". Prioritize the financial query over the greeting.
+  IMPORTANT RULE: If the user's input contains both a greeting (like "hello", "apa kabar") AND a specific financial question, the primary intent MUST be "query_data" or "query_budget" depending on the question. Prioritize the financial query over the greeting.
 
   The possible intents are:
   - "log_transaction": User is describing a financial transaction (income, expense, or transfer)
-  - "query_data": User is asking a question about their financial data
+  - "query_data": User is asking a question about their financial data (transactions, spending, income)
+  - "query_budget": User is asking about their budget status, budget utilization, or budget-related information
   - "general_help": User is asking about your capabilities, greeting you, or having general conversation
   - "confirm_transaction": User is confirming a pending transaction (yes, okay, correct, etc.)
   - "cancel_transaction": User is canceling a pending transaction (no, cancel, nevermind, etc.)
 
-  for the "query_data" intent, you MUST also determine the specific 'queryType' from the following list: [${validQueryTypes}]
+  For the "query_data" or "query_budget" intent, you MUST also determine the specific 'queryType' from the following list: [${validQueryTypes}]
 
   Examples:
   User: "Hai, gimana nih kondisi keuanganku?"
   Response: {"intent": "query_data", "query": "current financial condition", "confidence": 0.9, "queryType": "balance_by_fund"}
+
+  User: "Berapa sisa budget bulan ini?"
+  Response: {"intent": "query_budget", "query": "remaining budget this month", "confidence": 0.95, "queryType": "budget_overview"}
+
+  User: "Kategori mana yang over budget?"
+  Response: {"intent": "query_budget", "query": "over budget categories", "confidence": 0.95, "queryType": "over_budget_categories"}
 
   User: "Catat pengeluaran makan 50rb"
   Response: {"intent": "log_transaction", "confidence": 0.95}
@@ -37,11 +44,11 @@ export const getClassifierPrompt = (
   User: "Berapa total pengeluaran bulan ini?"
   Response: {"intent": "query_data", "query": "total expenses this month", "confidence": 0.9, "queryType": "total_expenses_month"}
 
-  User: "Apa kategori pengeluaran terbesar saya?"
-  Response: {"intent": "query_data", "query": "top expense category", "confidence": 0.95, "queryType": "top_expense_category"}
+  User: "Sarankan budget untuk saya"
+  Response: {"intent": "query_budget", "query": "budget recommendations", "confidence": 0.9, "queryType": "budget_recommendations"}
 
-  User: "Bandingkan pengeluaran bulan ini dan bulan lalu"
-  Response: {"intent": "query_data", "query": "monthly comparison", "confidence": 0.92, "queryType": "monthly_comparison"}
+  User: "Bandingkan budget vs pengeluaran aktual"
+  Response: {"intent": "query_budget", "query": "budget vs actual", "confidence": 0.95, "queryType": "budget_vs_actual"}
 
   User: "Ya, benar"
   Response: {"intent": "confirm_transaction", "confidence": 0.85}
@@ -52,15 +59,12 @@ export const getClassifierPrompt = (
   User: "Apa yang bisa kamu lakukan?"
   Response: {"intent": "general_help", "confidence": 0.95}
 
-  User: "Siapa kamu?"
-  Response: {"intent": "general_help", "confidence": 0.9}
-
   JSON Output Schema:
   {
     "intent": "intent_name",
     "confidence": 0.0-1.0,
-    "query": "optional: summarized question in English (for query_data intent)"
-    "queryType": "optional: specific query type from the list (for query_data intent)"
+    "query": "optional: summarized question in English (for query_data/query_budget intent)"
+    "queryType": "optional: specific query type from the list (for query_data/query_budget intent)"
   }
 
   User Input: "${userInput}"
@@ -98,7 +102,7 @@ export const getTransactionExtractionPrompt = (
     "type": "expense",
     "amount": 50000,
     "description": "Makan siang",
-    "date": "2025-10-16",
+    "date": "2025-10-19",
     "category": "Food",
     "fundSource": "dompet",
     "confidence": 0.9,
@@ -110,7 +114,7 @@ export const getTransactionExtractionPrompt = (
     "type": "transfer",
     "amount": 1000000,
     "description": "Transfer dari bank ke dompet",
-    "date": "2025-10-16",
+    "date": "2025-10-19",
     "sourceFund": "bank",
     "destinationFund": "dompet",
     "confidence": 0.95,
@@ -122,7 +126,7 @@ export const getTransactionExtractionPrompt = (
     "type": "income",
     "amount": 5000000,
     "description": "Gaji",
-    "date": "2025-10-16",
+    "date": "2025-10-19",
     "category": "Salary",
     "confidence": 0.7,
     "missingFields": ["fundSource"]
@@ -181,6 +185,41 @@ export const getQueryAnswerPrompt = (
   4. If data shows concerning trends, gently point them out
   5. Offer actionable insights when relevant
   6. Format currency amounts clearly (e.g., "Rp 50.000")
+  7. Use emojis sparingly (1-2 max) to add warmth
+
+  Your Answer (in Indonesian):`;
+};
+
+// Budget-specific query prompt
+export const getBudgetQueryPrompt = (
+  originalQuery: string,
+  budgetData: any,
+  conversationContext?: string
+): string => {
+  const contextSection = conversationContext
+    ? `\n\nConversation Context:\n${conversationContext}\n`
+    : "";
+
+  return `You are a helpful financial assistant specializing in budget management. Answer the user's budget-related question in natural Indonesian based on the budget data provided.
+
+  ${contextSection}
+
+  Budget Data:
+  ${JSON.stringify(budgetData, null, 2)}
+
+  User's Original Question: "${originalQuery}"
+
+  Instructions:
+  1. Provide a clear, informative answer in Indonesian about their budget
+  2. Use friendly but professional tone
+  3. Include specific numbers from the budget data
+  4. If categories are over budget, provide constructive advice
+  5. If budget is healthy, offer encouragement
+  6. Suggest actionable steps for budget improvement when relevant
+  7. Format currency amounts clearly (e.g., "Rp 500.000")
+  8. Use status emojis from the data (✅, ⚠️, 🔴) to make it visual
+  9. Keep paragraphs short and scannable
+  10. End with a helpful tip or next step suggestion
 
   Your Answer (in Indonesian):`;
 };
@@ -223,12 +262,18 @@ export const getGeneralHelpPrompt = (
     - "Tampilkan transaksi terakhir"
     - "Bandingkan pengeluaran bulan ini vs bulan lalu"
     
-  3. **Financial Insights**: You can provide analysis and recommendations
+  3. **Budget Management**: You can help with budget tracking and recommendations
+    - "Berapa sisa budget bulan ini?"
+    - "Kategori mana yang over budget?"
+    - "Sarankan budget untuk bulan depan"
+    - "Bandingkan budget vs pengeluaran aktual"
+    
+  4. **Financial Insights**: You can provide analysis and recommendations
     - Spending trends
     - Budget suggestions
     - Saving tips
 
-  4. **Natural Conversation**: You can chat naturally in Indonesian and understand context
+  5. **Natural Conversation**: You can chat naturally in Indonesian and understand context
 
   User's Message: "${userInput}"
 

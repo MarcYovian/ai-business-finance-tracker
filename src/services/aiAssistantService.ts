@@ -15,8 +15,15 @@ import {
   Message,
   PendingTransaction,
 } from "@/types/ai";
-import { Category, FundSource, Transaction } from "@/types/finance";
 import {
+  Budget,
+  BudgetDetail,
+  Category,
+  FundSource,
+  Transaction,
+} from "@/types/finance";
+import {
+  getBudgetQueryPrompt,
   getClarificationPrompt,
   getClassifierPrompt,
   getGeneralHelpPrompt,
@@ -35,6 +42,13 @@ export interface AIAssistantServiceDeps {
   categories: Category[];
   fundSources: FundSource[];
   transactions: Transaction[];
+}
+
+// 🆕 Extended deps with budget data
+export interface AIAssistantServiceDepsWithBudget
+  extends AIAssistantServiceDeps {
+  budgetDetails?: BudgetDetail[];
+  currentBudget?: Budget | null;
 }
 
 export class AIAssistantService {
@@ -345,6 +359,54 @@ export class AIAssistantService {
 
     const conversationHistory = this.buildConversationHistory(context);
     const answererPrompt = getQueryAnswerPrompt(
+      originalQuery,
+      queryResult,
+      conversationHistory
+    );
+
+    let finalAnswer: string;
+    if (provider === "gemini") {
+      finalAnswer = await AIService.processWithGemini(apiKey, answererPrompt);
+    } else {
+      finalAnswer = await AIService.processWithOpenAI(
+        apiKey,
+        answererPrompt,
+        originalQuery
+      );
+    }
+
+    return finalAnswer;
+  }
+
+  // 🆕 Execute budget-specific queries
+  async executeBudgetQuery(
+    queryType: string,
+    deps: AIAssistantServiceDepsWithBudget,
+    context: ConversationContext,
+    originalQuery: string
+  ): Promise<string> {
+    const provider = aiConfigStorage.getProvider();
+    const apiKey = aiConfigStorage.getActiveKey();
+
+    if (!apiKey) {
+      throw new AIServiceError(
+        MESSAGE_TEMPLATES.API_KEY_MISSING,
+        "API_KEY_MISSING",
+        false
+      );
+    }
+
+    const queryEngine = new QueryEngine(
+      deps.transactions,
+      deps.categories,
+      deps.fundSources,
+      deps.budgetDetails,
+      deps.currentBudget
+    );
+    const queryResult = queryEngine.executeQuery(queryType);
+
+    const conversationHistory = this.buildConversationHistory(context);
+    const answererPrompt = getBudgetQueryPrompt(
       originalQuery,
       queryResult,
       conversationHistory

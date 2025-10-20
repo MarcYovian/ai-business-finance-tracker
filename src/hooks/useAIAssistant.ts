@@ -1,4 +1,5 @@
 import {
+  BUDGET_THRESHOLDS,
   INTENT_TYPES,
   MESSAGE_TEMPLATES,
   SUGGESTED_PROMPTS,
@@ -11,6 +12,7 @@ import { ConversationContext, Message } from "@/types/ai";
 import { ValidationError } from "@/utils/validation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useBudgetDetails, useCurrentBudget } from "./useBudget";
 import { useCategories } from "./useCategories";
 import { useFundSources } from "./useFundSources";
 import { useTransactions } from "./useTransactions";
@@ -23,6 +25,8 @@ export const useAIAssistant = () => {
   const { data: transactions = [] } = useTransactions(user?.id || "");
   const { data: categories = [] } = useCategories(user?.id || "");
   const { data: fundSources = [] } = useFundSources(user?.id || "");
+  const { data: currentBudget } = useCurrentBudget(new Date());
+  const { data: budgetDetails = [] } = useBudgetDetails(currentBudget?.id);
 
   const [messages, setMessages] = useState<Message[]>([
     aiAssistantService.createMessage("assistant", MESSAGE_TEMPLATES.WELCOME),
@@ -68,6 +72,66 @@ export const useAIAssistant = () => {
         messages: newMessages,
       };
     });
+  };
+
+  // 🆕 Check budget impact before transaction
+  const checkBudgetImpact = (transaction: any): string | null => {
+    if (!currentBudget || !budgetDetails.length) return null;
+    if (transaction.type !== "expense" || !transaction.category) return null;
+
+    const category = categories.find(
+      (c) =>
+        c.name.toLowerCase() === transaction.category?.toLowerCase() &&
+        c.type === "expense"
+    );
+
+    if (!category) return null;
+
+    const budgetDetail = budgetDetails.find(
+      (bd) => bd.category_id === category.id
+    );
+    if (!budgetDetail) return null;
+
+    const currentSpent = budgetDetail.spent / 100;
+    const budgetAmount = budgetDetail.amount / 100;
+    const newTotal = currentSpent + transaction.amount;
+    const utilization = (newTotal / budgetAmount) * 100;
+
+    if (newTotal > budgetAmount) {
+      const excess = newTotal - budgetAmount;
+      return `🔴 ${
+        MESSAGE_TEMPLATES.BUDGET_EXCEEDED
+      }\nTransaksi ini akan melebihi budget "${
+        transaction.category
+      }" sebesar Rp ${excess.toLocaleString(
+        "id-ID"
+      )}.\n\nBudget: Rp ${budgetAmount.toLocaleString(
+        "id-ID"
+      )}\nSudah terpakai: Rp ${currentSpent.toLocaleString(
+        "id-ID"
+      )}\nTotal setelah transaksi: Rp ${newTotal.toLocaleString(
+        "id-ID"
+      )} (${utilization.toFixed(1)}%)\nKelebihan: Rp ${excess.toLocaleString(
+        "id-ID"
+      )}`;
+    } else if (utilization > BUDGET_THRESHOLDS.WARNING * 100) {
+      const remaining = budgetAmount - newTotal;
+      return `⚠️ ${
+        MESSAGE_TEMPLATES.BUDGET_WARNING
+      }\nTransaksi ini akan menggunakan ${utilization.toFixed(
+        1
+      )}% dari budget "${
+        transaction.category
+      }".\n\nBudget: Rp ${budgetAmount.toLocaleString(
+        "id-ID"
+      )}\nSudah terpakai: Rp ${currentSpent.toLocaleString(
+        "id-ID"
+      )}\nSetelah transaksi: Rp ${newTotal.toLocaleString(
+        "id-ID"
+      )}\nSisa: Rp ${remaining.toLocaleString("id-ID")}`;
+    }
+
+    return null;
   };
 
   // Main send handler
@@ -142,6 +206,17 @@ export const useAIAssistant = () => {
         );
         break;
 
+      case INTENT_TYPES.QUERY_BUDGET:
+        await handleQueryBudget(
+          userInput,
+          classification.queryType || "budget_overview"
+        );
+        break;
+
+      case INTENT_TYPES.CHECK_BUDGET_STATUS:
+        await handleCheckBudgetStatus();
+        break;
+
       case INTENT_TYPES.CONFIRM_TRANSACTION:
         await handleConfirmTransaction();
         break;
@@ -174,17 +249,26 @@ export const useAIAssistant = () => {
       : [aiResponse];
 
     for (const transaction of transactionArray) {
+      // Check budget impact
+      const budgetWarning = checkBudgetImpact(transaction);
+
       // Validate transaction
       const validation = aiAssistantService.validateTransaction(transaction, {
         categories,
         fundSources,
       });
 
+      // Add budget warning to validation
+      if (budgetWarning) {
+        validation.warnings = [...(validation.warnings || []), budgetWarning];
+      }
+
       // Check if transaction needs confirmation or clarification
       if (
         !validation.isValid ||
         transaction.confidence < 0.8 ||
-        transaction.missingFields?.length
+        transaction.missingFields?.length ||
+        budgetWarning
       ) {
         await handleTransactionClarification(transaction, validation);
         return;
@@ -417,6 +501,47 @@ export const useAIAssistant = () => {
     setSuggestedPrompts(SUGGESTED_PROMPTS.QUERY);
   };
 
+  // Handle budget queries
+  const handleQueryBudget = async (
+    originalQuery: string,
+    queryType: string
+  ) => {
+    if (!user) return;
+
+    const finalAnswer = await aiAssistantService.executeBudgetQuery(
+      queryType,
+      {
+        userId: user.id,
+        transactions,
+        categories,
+        fundSources,
+        budgetDetails,
+        currentBudget,
+      },
+      conversationContext,
+      originalQuery
+    );
+
+    addAssistantMessage(finalAnswer, {
+      intent: INTENT_TYPES.QUERY_BUDGET,
+    });
+
+    setSuggestedPrompts(SUGGESTED_PROMPTS.BUDGET);
+  };
+
+  // Handle budget status check
+  const handleCheckBudgetStatus = async () => {
+    if (!user) return;
+
+    if (!currentBudget || !budgetDetails.length) {
+      addAssistantMessage(MESSAGE_TEMPLATES.BUDGET_NOT_SET);
+      setSuggestedPrompts(SUGGESTED_PROMPTS.BUDGET_SETUP);
+      return;
+    }
+
+    await handleQueryBudget("Tampilkan status budget saya", "budget_overview");
+  };
+
   // Handle general help
   const handleGeneralHelp = async (userInput: string) => {
     if (!user) return;
@@ -435,6 +560,7 @@ export const useAIAssistant = () => {
     setSuggestedPrompts([
       ...SUGGESTED_PROMPTS.TRANSACTION,
       ...SUGGESTED_PROMPTS.QUERY,
+      ...SUGGESTED_PROMPTS.BUDGET,
     ]);
   };
 
@@ -464,6 +590,8 @@ export const useAIAssistant = () => {
     isLoading,
     suggestedPrompts,
     pendingTransaction: conversationContext.pendingTransaction,
+    currentBudget,
+    budgetDetails,
     handleSend,
     setInput,
     handleKeyPress,

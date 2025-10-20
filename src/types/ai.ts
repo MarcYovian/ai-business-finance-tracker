@@ -9,6 +9,7 @@ export interface Message {
     intent?: string;
     confidence?: number;
     processingTime?: number;
+    budgetWarning?: boolean;
   };
 }
 
@@ -19,6 +20,11 @@ export interface ConversationContext {
   userPreferences?: {
     defaultFundSource?: string;
     defaultCategory?: string;
+  };
+  budgetContext?: {
+    hasBudget: boolean;
+    overBudgetCategories?: string[];
+    warningCategories?: string[];
   };
 }
 
@@ -34,6 +40,13 @@ export interface PendingTransaction {
   destinationFund?: string;
   confidence: number;
   needsConfirmation: boolean;
+  budgetImpact?: {
+    categoryBudget?: number;
+    currentSpent?: number;
+    afterTransaction?: number;
+    utilization?: number;
+    status?: "safe" | "warning" | "over";
+  };
 }
 
 export interface AIClassification {
@@ -74,6 +87,16 @@ export interface QueryResult {
   data: any;
   summary: string;
   visualizationData?: any;
+  recomendations?: string[];
+}
+
+export interface BudgetQueryResult extends QueryResult {
+  budgetStatus?: {
+    overallUtilization: number;
+    categoriesOverBudget: number;
+    categoriesAtWarning: number;
+    categoriesSafe: number;
+  };
 }
 
 export interface CacheEntry<T> {
