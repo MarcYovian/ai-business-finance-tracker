@@ -1,3 +1,4 @@
+import { useAuth } from "@/contexts/AuthContext";
 import { motion } from "framer-motion";
 import { ArrowRight, Bot, TrendingUp, Zap } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -41,29 +42,48 @@ export default function IndexPage() {
 }
 
 // 1. Header / Navigation Bar
-const Header = () => (
-  <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur-lg">
-    <div className="container flex h-14 items-center">
-      <Link to="/" className="mr-6 flex items-center space-x-2">
-        <Bot className="h-6 w-6 text-primary" />
-        <span className="font-bold">AI-Fi Tracker</span>
-      </Link>
-      <div className="flex flex-1 items-center justify-end space-x-4">
-        <nav className="flex items-center space-x-2">
-          <Button variant="ghost" asChild>
-            <Link to="/auth">Login</Link>
-          </Button>
-          <Button asChild>
-            <Link to="/auth">Sign Up</Link>
-          </Button>
-        </nav>
+const Header = () => {
+  const { user, logout } = useAuth();
+
+  return (
+    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur-lg">
+      <div className="container flex h-14 items-center">
+        <Link to="/" className="mr-6 flex items-center space-x-2">
+          <Bot className="h-6 w-6 text-primary" />
+          <span className="font-bold">AI-Fi Tracker</span>
+        </Link>
+        <div className="flex flex-1 items-center justify-end space-x-4">
+          <nav className="flex items-center space-x-2">
+            {user ? (
+              <>
+                <Button variant="ghost" asChild>
+                  <Link to="/dashboard">Dashboard</Link>
+                </Button>
+                <Button variant="outline" onClick={() => logout()}>
+                  Logout
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="ghost" asChild>
+                  <Link to="/auth">Login</Link>
+                </Button>
+                <Button asChild>
+                  <Link to="/auth">Sign Up</Link>
+                </Button>
+              </>
+            )}
+          </nav>
+        </div>
       </div>
-    </div>
-  </header>
-);
+    </header>
+  );
+};
 
 // 2. Hero Section
 const HeroSection = () => {
+  const { user } = useAuth();
+
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -105,8 +125,8 @@ const HeroSection = () => {
 
         <motion.div variants={itemVariants} className="mt-8">
           <Button size="lg" asChild>
-            <Link to="/auth">
-              Get Started for Free
+            <Link to={user ? "/dashboard" : "/auth"}>
+              {user ? "Go to Dashboard" : "Get Started for Free"}
               <ArrowRight className="ml-2" />
             </Link>
           </Button>
@@ -262,6 +282,8 @@ const SocialProofSection = () => {
 
 // 5. Final Call-to-Action
 const FinalCTASection = () => {
+  const { user } = useAuth();
+
   return (
     <Section className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground">
       <motion.div
@@ -278,8 +300,8 @@ const FinalCTASection = () => {
           Start tracking smarter, not harder. Join AI-Fi Tracker today.
         </p>
         <Button size="lg" variant="secondary" asChild className="mt-8">
-          <Link to="/auth">
-            Sign Up Now
+          <Link to={user ? "/dashboard" : "/auth"}>
+            {user ? "Go to Dashboard" : "Sign Up Now"}
             <ArrowRight className="ml-2" />
           </Link>
         </Button>
