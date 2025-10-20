@@ -71,11 +71,7 @@ You can ask questions about your financial data in plain English.
 -   **Query Engine**: The `QueryEngine` (`src/utils/queryEngine.ts`) processes the request against your local data.
 -   **Natural Language Response**: The structured result from the Query Engine is then sent back to the AI model to generate a friendly, human-readable answer.
 
-**Example Flow:**
-
-> **User**: `how much did I spend on food this month?`
-> **AI**: (Detects query, gets data from Query Engine)
-> **AI**: You have spent Rp 1.200.000 on Food this month.
+For a more in-depth explanation, see the [Query Engine](./../technical/09-query-engine.md) technical documentation.
 
 ### c. Context Awareness
 
@@ -95,3 +91,5 @@ The assistant remembers the last few messages in the conversation, allowing for 
 -   **AI Service**: The `AIService` (`src/services/aiService.ts`) is a wrapper around the OpenAI and Gemini SDKs, providing a unified interface for making API calls.
 -   **Prompt Engineering**: The quality of the AI's response is heavily dependent on the prompts. The `promptTemplates.ts` file contains carefully crafted prompts for each task (classification, extraction, etc.).
 -   **State Management**: The entire state of the conversation, including messages and the pending transaction, is managed within the `useAIAssistant` hook.
+
+For a more detailed guide on how the prompts are constructed, see the [Prompt Engineering](./../technical/08-prompt-engineering.md) documentation.

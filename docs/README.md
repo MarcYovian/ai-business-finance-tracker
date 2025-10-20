@@ -22,6 +22,7 @@ Learn about the core features of the application.
 - [**Transaction Management**](./features/02-transaction-management.md) - Detailed information on adding, editing, and deleting transactions.
 - [**AI Assistant**](./features/03-ai-assistant.md) - Discover how to use the AI assistant for natural language transaction logging.
 - [**Settings**](./features/04-settings.md) - Learn how to configure the application, manage categories, and fund sources.
+- [**Monthly Budget**](./features/05-budget.md) - An overview of the monthly budget feature.
 
 ### 📖 Guides
 
@@ -36,6 +37,10 @@ For developers who want to understand the technical implementation of the projec
 - [**Project Architecture**](./technical/01-project-architecture.md) - A high-level overview of the tech stack and project structure.
 - [**Database and RPC Functions**](./technical/02-database-and-rpc.md) - An explanation of the database schema and the role of RPC functions.
 - [**State Management**](./technical/03-state-management.md) - A look into how server state is managed using TanStack Query.
+- [**Layout and Navigation**](./technical/06-layout-and-navigation.md) - An explanation of the main layout and sidebar navigation.
+- [**Application Constants**](./technical/07-application-constants.md) - A reference for the application-wide constants.
+- [**Prompt Engineering**](./technical/08-prompt-engineering.md) - A guide to the prompt engineering strategies used for the AI assistant.
+- [**Query Engine**](./technical/09-query-engine.md) - An overview of the query engine used by the AI assistant.
 
 ### 📅 Changelogs
 
