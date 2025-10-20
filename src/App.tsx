@@ -3,6 +3,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import {
   BrowserRouter,
   Navigate,
@@ -105,6 +107,8 @@ const App = () => (
             {/* 404 route */}
             <Route path="*" element={<NotFound />} />
           </Routes>
+          <SpeedInsights />
+          <Analytics />
         </BrowserRouter>
       </AuthProvider>
     </TooltipProvider>
