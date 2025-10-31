@@ -1,0 +1,22 @@
+version: '3.8'
+services:
+  # Nama service kita, bisa apa saja
+  app:
+    # Perintahkan Docker untuk build image dari Dockerfile di direktori ini
+    build: .
+    # Mapping port: 
+    # Port "8080" di Pop!_OS Anda akan terhubung ke port "8080" di dalam container
+    ports:
+      - "8080:8080"
+    # Ini adalah bagian terpenting untuk development:
+    volumes:
+      # 1. Mount semua file dari direktori ini (host) ke /app (container)
+      #    Artinya, editan Anda di VSCode akan langsung terlihat di container.
+      - .:/app
+      # 2. "Volume anonim" untuk node_modules.
+      #    Ini mencegah folder node_modules di host (yang kosong)
+      #    menimpa folder node_modules di dalam container (yang sudah di-install).
+      - /app/node_modules
+    # Beritahu Docker untuk memuat environment variables dari file .env
+    env_file:
+      - .env

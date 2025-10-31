@@ -1,0 +1,11 @@
+# Abaikan folder dependencies di host
+node_modules
+
+# Abaikan folder build
+dist
+
+# Abaikan file .env (agar tidak masuk ke image)
+.env
+
+# Abaikan folder Git
+.git
