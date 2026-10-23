@@ -1,6 +1,7 @@
 import { Layout } from "@/components/Layout";
 import { TransferDialog } from "@/components/TransferDialog";
 import { Button } from "@/components/ui/button";
+import { FEATURES } from "@/config/features";
 import {
   Card,
   CardContent,
@@ -311,15 +312,17 @@ export default function Settings() {
           </p>
         </div>
 
-        <Tabs defaultValue="ai" className="w-full">
-          <TabsList className="w-full grid grid-cols-1 sm:grid-cols-3">
-            <TabsTrigger
-              value="ai"
-              className="flex items-center gap-2 py-2 sm:py-1.5 data-[state=active]:shadow-sm"
-            >
-              <Sparkles className="h-5 w-5" />
-              <span>AI Settings</span>
-            </TabsTrigger>
+        <Tabs defaultValue={FEATURES.ENABLE_AI ? "ai" : "categories"} className="w-full">
+          <TabsList className={`w-full grid grid-cols-1 ${FEATURES.ENABLE_AI ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+            {FEATURES.ENABLE_AI && (
+              <TabsTrigger
+                value="ai"
+                className="flex items-center gap-2 py-2 sm:py-1.5 data-[state=active]:shadow-sm"
+              >
+                <Sparkles className="h-5 w-5" />
+                <span>AI Settings</span>
+              </TabsTrigger>
+            )}
             <TabsTrigger
               value="categories"
               className="flex items-center gap-2 py-2 sm:py-1.5 data-[state=active]:shadow-sm"
@@ -336,66 +339,68 @@ export default function Settings() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="ai">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 rounded-lg bg-primary/10">
-                    <Sparkles className="h-6 w-6 text-primary" />
+          {FEATURES.ENABLE_AI && (
+            <TabsContent value="ai">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <Sparkles className="h-6 w-6 text-primary" />
+                    </div>
+                    <div>
+                      <CardTitle>AI Provider</CardTitle>
+                      <CardDescription>
+                        Choose your AI provider and enter the API key.
+                      </CardDescription>
+                    </div>
                   </div>
-                  <div>
-                    <CardTitle>AI Provider</CardTitle>
-                    <CardDescription>
-                      Choose your AI provider and enter the API key.
-                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-2">
+                    <Label>Provider</Label>
+                    <Select value={aiProvider} onValueChange={setAiProvider}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="openai">OpenAI</SelectItem>
+                        <SelectItem value="gemini">Google Gemini</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-2">
-                  <Label>Provider</Label>
-                  <Select value={aiProvider} onValueChange={setAiProvider}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="openai">OpenAI</SelectItem>
-                      <SelectItem value="gemini">Google Gemini</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="openai-key">OpenAI API Key</Label>
-                    <Input
-                      id="openai-key"
-                      type="password"
-                      value={openAIKey}
-                      onChange={(e) => setOpenAIKey(e.target.value)}
-                      placeholder="sk-..."
-                      disabled={aiProvider !== "openai"}
-                    />
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="openai-key">OpenAI API Key</Label>
+                      <Input
+                        id="openai-key"
+                        type="password"
+                        value={openAIKey}
+                        onChange={(e) => setOpenAIKey(e.target.value)}
+                        placeholder="sk-..."
+                        disabled={aiProvider !== "openai"}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="gemini-key">Gemini API Key</Label>
+                      <Input
+                        id="gemini-key"
+                        type="password"
+                        value={geminiKey}
+                        onChange={(e) => setGeminiKey(e.target.value)}
+                        placeholder="AIza..."
+                        disabled={aiProvider !== "gemini"}
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <Label htmlFor="gemini-key">Gemini API Key</Label>
-                    <Input
-                      id="gemini-key"
-                      type="password"
-                      value={geminiKey}
-                      onChange={(e) => setGeminiKey(e.target.value)}
-                      placeholder="AIza..."
-                      disabled={aiProvider !== "gemini"}
-                    />
-                  </div>
-                </div>
-              </CardContent>
-              <CardFooter className="flex justify-end">
-                <Button onClick={handleSaveKeys} className="w-full sm:w-auto">
-                  Save Settings
-                </Button>
-              </CardFooter>
-            </Card>
-          </TabsContent>
+                </CardContent>
+                <CardFooter className="flex justify-end">
+                  <Button onClick={handleSaveKeys} className="w-full sm:w-auto">
+                    Save Settings
+                  </Button>
+                </CardFooter>
+              </Card>
+            </TabsContent>
+          )}
 
           <TabsContent value="categories">
             <Card>

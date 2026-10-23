@@ -6,17 +6,26 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Menu, LayoutDashboard, Receipt, Bot, Settings, LogOut, Target } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 
+import { FEATURES } from '@/config/features';
+
 interface LayoutProps {
   children: ReactNode;
 }
 
-const navItems = [
+const baseNavItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/transactions', label: 'Transactions', icon: Receipt },
   { path: '/budget', label: 'Budget', icon: Target },
   { path: '/ai-assistant', label: 'AI Assistant', icon: Bot },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
+
+const navItems = baseNavItems.filter((item) => {
+  if (item.path === '/ai-assistant' && !FEATURES.ENABLE_AI) {
+    return false;
+  }
+  return true;
+});
 
 const SidebarNav = ({ onLinkClick }: { onLinkClick?: () => void }) => {
   const navigate = useNavigate();

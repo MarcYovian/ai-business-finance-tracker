@@ -8,6 +8,7 @@ import { TrendingUp, TrendingDown, DollarSign, Receipt, Lightbulb, BarChart2, Pi
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useCategories } from '@/hooks/useCategories';
+import { FEATURES } from '@/config/features';
 
 const DashboardLoading = () => (
   <Layout>
@@ -203,14 +204,18 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {insights.length > 0 && (
+        {FEATURES.ENABLE_INSIGHTS && insights.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Lightbulb className="h-5 w-5 text-amber-500" />
-                AI Insights
+                {FEATURES.ENABLE_AI ? "AI Insights" : "Financial Insights"}
               </CardTitle>
-              <CardDescription>Intelligent analysis of your financial data</CardDescription>
+              <CardDescription>
+                {FEATURES.ENABLE_AI
+                  ? "Intelligent analysis of your financial data"
+                  : "Statistical analysis of your financial data"}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {insights.map((insight, index) => (

@@ -13,6 +13,7 @@ import {
   Routes,
   useLocation,
 } from "react-router-dom";
+import { FEATURES } from "@/config/features";
 
 const AIAssistant = lazy(() => import("./pages/AIAssistant"));
 const Auth = lazy(() => import("./pages/Auth"));
@@ -103,7 +104,7 @@ const App = () => (
                 path="/ai-assistant"
                 element={
                   <ProtectedRoute>
-                    <AIAssistant />
+                    {FEATURES.ENABLE_AI ? <AIAssistant /> : <Navigate to="/dashboard" replace />}
                   </ProtectedRoute>
                 }
               />
