@@ -620,7 +620,7 @@ Fungsi kompatibilitas ini dipanggil langsung oleh modul frontend client Supabase
 #### 1. `create_transaction_and_update_balance`
 - **Tujuan**: Membuat transaksi baru, menangani biaya transfer (jika ada), dan memperbarui saldo rekening secara atomik.
 - **Security**: `SECURITY DEFINER`
-- **Signature**:
+- **Signature & Parameters**:
   ```sql
   create_transaction_and_update_balance(
       p_description TEXT,
@@ -631,7 +631,7 @@ Fungsi kompatibilitas ini dipanggil langsung oleh modul frontend client Supabase
       p_category_id UUID,
       p_source_fund_id UUID,
       p_destination_fund_id UUID,
-      p_fee BIGINT
+      p_fee BIGINT DEFAULT 0
   ) RETURNS JSONB
   ```
 - **Logika Eksekusi**:
@@ -643,11 +643,90 @@ Fungsi kompatibilitas ini dipanggil langsung oleh modul frontend client Supabase
      - `income`: Tambahkan `p_amount` ke saldo tujuan.
      - `transfer`: Kurangi `p_amount + COALESCE(p_fee, 0)` dari sumber dan tambahkan `p_amount` ke tujuan.
   5. Mengembalikan row transaksi baru dalam format JSON.
+- **SQL Definition**:
+  ```sql
+  CREATE OR REPLACE FUNCTION public.create_transaction_and_update_balance(
+      p_description text,
+      p_amount bigint,
+      p_type text,
+      p_transaction_date timestamp with time zone,
+      p_user_id uuid,
+      p_category_id uuid,
+      p_source_fund_id uuid,
+      p_destination_fund_id uuid,
+      p_fee bigint DEFAULT 0
+  )
+  RETURNS jsonb
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  AS $$
+  DECLARE
+    new_transaction transactions;
+    v_fee_tx transactions;
+    v_source_bal bigint;
+  BEGIN
+    -- Validasi saldo untuk pengeluaran atau transfer
+    IF p_type IN ('expense', 'transfer') AND p_source_fund_id IS NOT NULL THEN
+      SELECT balance INTO v_source_bal FROM public.fund_sources WHERE id = p_source_fund_id;
+      IF v_source_bal IS NULL OR v_source_bal < (p_amount + COALESCE(p_fee, 0)) THEN
+        RAISE EXCEPTION 'Saldo rekening tidak mencukupi untuk transaksi ini.';
+      END IF;
+    END IF;
+
+    -- 1. Insert main transaction
+    INSERT INTO public.transactions (
+      description, amount, type, transaction_date, user_id, 
+      category_id, source_fund_id, destination_fund_id, status
+    )
+    VALUES (
+      p_description, p_amount, p_type, p_transaction_date, p_user_id, 
+      p_category_id, p_source_fund_id, p_destination_fund_id, 'completed'
+    )
+    RETURNING * INTO new_transaction;
+
+    -- 2. Update balances
+    IF p_type = 'income' AND p_destination_fund_id IS NOT NULL THEN
+      UPDATE public.fund_sources
+      SET balance = balance + p_amount, updated_at = now()
+      WHERE id = p_destination_fund_id;
+
+    ELSIF p_type = 'expense' AND p_source_fund_id IS NOT NULL THEN
+      UPDATE public.fund_sources
+      SET balance = balance - p_amount, updated_at = now()
+      WHERE id = p_source_fund_id;
+
+    ELSIF p_type = 'transfer' AND p_source_fund_id IS NOT NULL AND p_destination_fund_id IS NOT NULL THEN
+      UPDATE public.fund_sources
+      SET balance = balance - (p_amount + COALESCE(p_fee, 0)), updated_at = now()
+      WHERE id = p_source_fund_id;
+
+      UPDATE public.fund_sources
+      SET balance = balance + p_amount, updated_at = now()
+      WHERE id = p_destination_fund_id;
+
+      -- 3. Fee transaction if applicable
+      IF p_fee > 0 THEN
+        INSERT INTO public.transactions (
+          description, amount, type, transaction_date, user_id, 
+          category_id, source_fund_id, parent_transaction_id, status
+        )
+        VALUES (
+          'Biaya admin transfer', p_fee, 'expense', p_transaction_date, p_user_id, 
+          NULL, p_source_fund_id, new_transaction.id, 'completed'
+        )
+        RETURNING * INTO v_fee_tx;
+      END IF;
+    END IF;
+
+    RETURN to_jsonb(new_transaction);
+  END;
+  $$;
+  ```
 
 #### 2. `update_transaction_and_update_balance`
 - **Tujuan**: Mengubah data transaksi yang sudah ada dengan membalikkan (*revert*) dampak transaksi lama terlebih dahulu, lalu menerapkan dampak saldo baru.
 - **Security**: `SECURITY DEFINER`
-- **Signature**:
+- **Signature & Parameters**:
   ```sql
   update_transaction_and_update_balance(
       p_id UUID,
@@ -658,7 +737,7 @@ Fungsi kompatibilitas ini dipanggil langsung oleh modul frontend client Supabase
       p_category_id UUID,
       p_source_fund_id UUID,
       p_destination_fund_id UUID,
-      p_fee BIGINT
+      p_fee BIGINT DEFAULT 0
   ) RETURNS VOID
   ```
 - **Logika Eksekusi**:
@@ -666,11 +745,103 @@ Fungsi kompatibilitas ini dipanggil langsung oleh modul frontend client Supabase
   2. Revert saldo `fund_sources` yang terdampak oleh transaksi lama dan biaya admin terkait.
   3. Lakukan update data baris transaksi utama.
   4. Terapkan saldo baru ke rekening terkait.
+- **SQL Definition**:
+  ```sql
+  CREATE OR REPLACE FUNCTION public.update_transaction_and_update_balance(
+      p_id UUID,
+      p_description TEXT,
+      p_amount BIGINT,
+      p_type TEXT,
+      p_transaction_date TIMESTAMPTZ,
+      p_category_id UUID,
+      p_source_fund_id UUID,
+      p_destination_fund_id UUID,
+      p_fee BIGINT DEFAULT 0
+  )
+  RETURNS VOID
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  AS $$
+  DECLARE
+      old_tx RECORD;
+      new_source_balance BIGINT;
+      old_fee_tx RECORD;
+  BEGIN
+      SELECT * INTO old_tx FROM public.transactions WHERE id = p_id;
+      IF NOT FOUND THEN
+          RAISE EXCEPTION 'Transaction with id % not found', p_id;
+      END IF;
+
+      -- 1. Revert fee lama jika ada
+      SELECT * INTO old_fee_tx FROM public.transactions
+      WHERE parent_transaction_id = old_tx.id;
+
+      IF FOUND THEN
+          UPDATE public.fund_sources
+          SET balance = balance + old_fee_tx.amount, updated_at = now()
+          WHERE id = old_fee_tx.source_fund_id;
+          DELETE FROM public.transactions WHERE id = old_fee_tx.id;
+      END IF;
+
+      -- 2. Revert transaksi utama lama
+      IF old_tx.type = 'expense' THEN
+          UPDATE public.fund_sources SET balance = balance + old_tx.amount, updated_at = now() WHERE id = old_tx.source_fund_id;
+      ELSIF old_tx.type = 'income' THEN
+          UPDATE public.fund_sources SET balance = balance - old_tx.amount, updated_at = now() WHERE id = old_tx.destination_fund_id;
+      ELSIF old_tx.type = 'transfer' THEN
+          UPDATE public.fund_sources SET balance = balance + old_tx.amount, updated_at = now() WHERE id = old_tx.source_fund_id;
+          UPDATE public.fund_sources SET balance = balance - old_tx.amount, updated_at = now() WHERE id = old_tx.destination_fund_id;
+      END IF;
+
+      -- 3. Validasi saldo akun baru
+      IF (p_type = 'expense' OR p_type = 'transfer') AND p_source_fund_id IS NOT NULL THEN
+          SELECT balance INTO new_source_balance FROM public.fund_sources WHERE id = p_source_fund_id;
+          IF new_source_balance < (p_amount + COALESCE(p_fee, 0)) THEN
+              RAISE EXCEPTION 'Saldo akun asal tidak mencukupi untuk update transaksi.';
+          END IF;
+      END IF;
+
+      -- 4. Terapkan saldo baru
+      IF p_type = 'expense' THEN
+          UPDATE public.fund_sources SET balance = balance - p_amount, updated_at = now() WHERE id = p_source_fund_id;
+      ELSIF p_type = 'income' THEN
+          UPDATE public.fund_sources SET balance = balance + p_amount, updated_at = now() WHERE id = p_destination_fund_id;
+      ELSIF p_type = 'transfer' THEN
+          UPDATE public.fund_sources SET balance = balance - (p_amount + COALESCE(p_fee, 0)), updated_at = now() WHERE id = p_source_fund_id;
+          UPDATE public.fund_sources SET balance = balance + p_amount, updated_at = now() WHERE id = p_destination_fund_id;
+
+          IF p_fee > 0 THEN
+              INSERT INTO public.transactions (
+                  description, amount, type, transaction_date, user_id, 
+                  category_id, source_fund_id, parent_transaction_id, status
+              )
+              VALUES (
+                  'Biaya admin transfer', p_fee, 'expense', p_transaction_date, 
+                  old_tx.user_id, NULL, p_source_fund_id, old_tx.id, 'completed'
+              );
+          END IF;
+      END IF;
+
+      -- 5. Update transaksi utama
+      UPDATE public.transactions
+      SET
+          description = p_description,
+          amount = p_amount,
+          type = p_type,
+          transaction_date = p_transaction_date,
+          category_id = p_category_id,
+          source_fund_id = p_source_fund_id,
+          destination_fund_id = p_destination_fund_id,
+          updated_at = now()
+      WHERE id = p_id;
+  END;
+  $$;
+  ```
 
 #### 3. `delete_transaction_and_revert_balance`
 - **Tujuan**: Menghapus transaksi, menghapus biaya anak terkait (*cascade fee*), dan mengembalikan saldo rekening ke kondisi semula.
 - **Security**: `SECURITY DEFINER`
-- **Signature**:
+- **Signature & Parameters**:
   ```sql
   delete_transaction_and_revert_balance(
       p_transaction_id UUID
@@ -680,11 +851,60 @@ Fungsi kompatibilitas ini dipanggil langsung oleh modul frontend client Supabase
   1. Identifikasi transaksi yang akan dihapus beserta anak transaksi biaya (`parent_transaction_id = p_transaction_id`).
   2. Kembalikan saldo (*revert balance*) pada akun sumber maupun tujuan.
   3. Hapus baris transaksi biaya (jika ada) dan hapus transaksi utama.
+- **SQL Definition**:
+  ```sql
+  CREATE OR REPLACE FUNCTION public.delete_transaction_and_revert_balance(p_transaction_id UUID)
+  RETURNS VOID
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  AS $$
+  DECLARE
+      tx_to_delete RECORD;
+      fee_amount BIGINT := 0;
+  BEGIN
+      SELECT * INTO tx_to_delete FROM public.transactions WHERE id = p_transaction_id;
+
+      IF NOT FOUND THEN
+          RAISE EXCEPTION 'Transaction with id % not found', p_transaction_id;
+      END IF;
+
+      -- Revert biaya admin anak jika ada
+      IF tx_to_delete.type = 'transfer' THEN
+          SELECT amount INTO fee_amount FROM public.transactions WHERE parent_transaction_id = tx_to_delete.id;
+          DELETE FROM public.transactions WHERE parent_transaction_id = tx_to_delete.id;
+      END IF;
+
+      -- Revert saldo akun
+      IF tx_to_delete.type = 'expense' THEN
+          UPDATE public.fund_sources
+          SET balance = balance + tx_to_delete.amount, updated_at = now()
+          WHERE id = tx_to_delete.source_fund_id;
+
+      ELSIF tx_to_delete.type = 'income' THEN
+          UPDATE public.fund_sources
+          SET balance = balance - tx_to_delete.amount, updated_at = now()
+          WHERE id = tx_to_delete.destination_fund_id;
+
+      ELSIF tx_to_delete.type = 'transfer' THEN
+          UPDATE public.fund_sources
+          SET balance = balance + tx_to_delete.amount + COALESCE(fee_amount, 0), updated_at = now()
+          WHERE id = tx_to_delete.source_fund_id;
+
+          UPDATE public.fund_sources
+          SET balance = balance - tx_to_delete.amount, updated_at = now()
+          WHERE id = tx_to_delete.destination_fund_id;
+      END IF;
+
+      -- Hapus row utama
+      DELETE FROM public.transactions WHERE id = p_transaction_id;
+  END;
+  $$;
+  ```
 
 #### 4. `get_or_create_budget_for_month`
 - **Tujuan**: Mengambil budget aktif untuk bulan kalender tertentu atau membuatkan budget default baru jika belum tersedia.
 - **Security**: `SECURITY DEFINER`
-- **Signature**:
+- **Signature & Parameters**:
   ```sql
   get_or_create_budget_for_month(
       p_user_id UUID,
@@ -698,11 +918,54 @@ Fungsi kompatibilitas ini dipanggil langsung oleh modul frontend client Supabase
       created_at TIMESTAMPTZ
   )
   ```
+- **SQL Definition**:
+  ```sql
+  CREATE OR REPLACE FUNCTION public.get_or_create_budget_for_month(
+      p_user_id UUID, 
+      p_month_date DATE
+  )
+  RETURNS TABLE (
+      id UUID, 
+      user_id UUID, 
+      name TEXT, 
+      start_date DATE, 
+      end_date DATE, 
+      created_at TIMESTAMPTZ
+  )
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  AS $$
+  DECLARE
+      v_budget_id UUID;
+      v_start_date DATE;
+      v_end_date DATE;
+      v_name TEXT;
+  BEGIN
+      v_start_date := date_trunc('month', p_month_date)::date;
+      v_end_date := (date_trunc('month', p_month_date) + interval '1 month - 1 day')::date;
+
+      SELECT b.id INTO v_budget_id FROM public.budgets b
+      WHERE b.user_id = p_user_id AND b.start_date = v_start_date;
+
+      IF NOT FOUND THEN
+          v_name := 'Budget for ' || to_char(p_month_date, 'Month YYYY');
+          INSERT INTO public.budgets (user_id, start_date, end_date, name, total_limit)
+          VALUES (p_user_id, v_start_date, v_end_date, v_name, 0)
+          RETURNING budgets.id INTO v_budget_id;
+      END IF;
+
+      RETURN QUERY 
+      SELECT b.id, b.user_id, b.name, b.start_date, b.end_date, b.created_at 
+      FROM public.budgets b 
+      WHERE b.id = v_budget_id;
+  END;
+  $$;
+  ```
 
 #### 5. `upsert_budget_with_items`
 - **Tujuan**: Menyimpan atau memperbarui dokumen pagu anggaran beserta seluruh rincian alokasi per kategori (`budget_items`) dalam satu transaksi atomik.
 - **Security**: `SECURITY DEFINER`
-- **Signature**:
+- **Signature & Parameters**:
   ```sql
   upsert_budget_with_items(
       p_user_id UUID,
@@ -712,10 +975,60 @@ Fungsi kompatibilitas ini dipanggil langsung oleh modul frontend client Supabase
       p_items JSONB
   ) RETURNS VOID
   ```
+- **SQL Definition**:
+  ```sql
+  CREATE OR REPLACE FUNCTION public.upsert_budget_with_items(
+      p_user_id UUID,
+      p_start_date DATE,
+      p_end_date DATE,
+      p_name TEXT,
+      p_items JSONB
+  )
+  RETURNS VOID
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  AS $$
+  DECLARE
+      v_budget_id UUID;
+      item jsonb;
+      v_total_limit BIGINT := 0;
+  BEGIN
+      -- Hitung total rencana anggaran dari items
+      SELECT COALESCE(SUM((elem->>'amount')::bigint), 0)
+      INTO v_total_limit
+      FROM jsonb_array_elements(p_items) AS elem;
+
+      INSERT INTO public.budgets (user_id, start_date, end_date, name, total_limit)
+      VALUES (p_user_id, p_start_date, p_end_date, p_name, GREATEST(v_total_limit, 1))
+      ON CONFLICT (id) DO UPDATE SET 
+          name = EXCLUDED.name,
+          total_limit = EXCLUDED.total_limit,
+          updated_at = now()
+      RETURNING id INTO v_budget_id;
+
+      -- Sinkronisasi item budget
+      DELETE FROM public.budget_items WHERE budget_id = v_budget_id;
+
+      FOR item IN SELECT jsonb_array_elements(p_items)
+      LOOP
+          INSERT INTO public.budget_items (budget_id, category_id, planned_amount, spent_amount)
+          VALUES (
+              v_budget_id,
+              (item->>'category_id')::uuid,
+              (item->>'amount')::bigint,
+              COALESCE((item->>'spent')::bigint, 0)
+          )
+          ON CONFLICT (budget_id, category_id) DO UPDATE SET
+              planned_amount = EXCLUDED.planned_amount,
+              updated_at = now();
+      END LOOP;
+  END;
+  $$;
+  ```
 
 #### 6. `get_budget_details`
 - **Tujuan**: Mengambil seluruh daftar alokasi kategori beserta perbandingan nilai rencana vs realisasi pengeluaran (`spent`).
-- **Signature**:
+- **Signature & Parameters**:
   ```sql
   get_budget_details(
       p_budget_id UUID
@@ -727,6 +1040,51 @@ Fungsi kompatibilitas ini dipanggil langsung oleh modul frontend client Supabase
       category_icon TEXT,
       spent BIGINT
   )
+  ```
+- **SQL Definition**:
+  ```sql
+  CREATE OR REPLACE FUNCTION public.get_budget_details(p_budget_id UUID)
+  RETURNS TABLE (
+      id UUID,
+      amount BIGINT,
+      category_id UUID,
+      category_name TEXT,
+      category_icon TEXT,
+      spent BIGINT
+  )
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  AS $$
+  BEGIN
+      RETURN QUERY
+      WITH budget_period AS (
+          SELECT b.start_date, b.end_date, b.user_id
+          FROM public.budgets b
+          WHERE b.id = p_budget_id
+      ),
+      category_spending AS (
+          SELECT
+              t.category_id,
+              SUM(t.amount) AS total_spent
+          FROM public.transactions t, budget_period bp
+          WHERE t.user_id = bp.user_id
+            AND t.type = 'expense'
+            AND t.transaction_date BETWEEN bp.start_date AND bp.end_date
+          GROUP BY t.category_id
+      )
+      SELECT
+          bi.id,
+          bi.planned_amount AS amount,
+          bi.category_id,
+          c.name AS category_name,
+          c.icon AS category_icon,
+          COALESCE(cs.total_spent, bi.spent_amount, 0)::BIGINT AS spent
+      FROM public.budget_items bi
+      JOIN public.categories c ON bi.category_id = c.id
+      LEFT JOIN category_spending cs ON bi.category_id = cs.category_id
+      WHERE bi.budget_id = p_budget_id;
+  END;
+  $$;
   ```
 
 ---
@@ -858,6 +1216,8 @@ Fungsi tingkat lanjut native database yang digunakan untuk mutasi dan penyesuaia
 
 ### 4.6 Automated Database Triggers Engine
 
+PostgreSQL database triggers menjaga integritas data secara proaktif tanpa bergantung pada logika sisi klien.
+
 | Trigger Name | Event | Target Table | Function yang Dijalankan | Fungsi & Dampak |
 | :--- | :--- | :--- | :--- | :--- |
 | `on_transaction_insert_update_budget` | AFTER INSERT | `transactions` | `update_budget_spent_amount()` | Mengkalkulasi penambahan `spent_amount` pada item budget terkait |
@@ -865,8 +1225,293 @@ Fungsi tingkat lanjut native database yang digunakan untuk mutasi dan penyesuaia
 | `on_transaction_delete_update_budget` | AFTER DELETE | `transactions` | `update_budget_spent_amount()` | Mengurangi `spent_amount` saat transaksi dibatalkan |
 | `trigger_check_budget_alert` | AFTER UPDATE | `budget_items` | `check_budget_alert()` | Memeriksa apakah rasio `spent / planned` >= `alert_threshold`. Jika ya, trigger memanggil `create_notification` |
 | `trigger_check_low_balance` | AFTER UPDATE | `fund_sources` | `check_low_balance()` | Memeriksa apakah saldo rekening berada di bawah batas minimum keamanan |
-| `trigger_check_goal_milestone` | AFTER UPDATE | `financial_goals` | `check_goal_milestone()` | Mengirim notifikasi selamat saat target tabungan 100% tercapai |
+| `trigger_check_goal_milestone` | AFTER UPDATE | `financial_goals` | `check_goal_milestone()` | Mengirim notifikasi selamat saat target tabungan 25%, 50%, 75%, atau 100% tercapai |
 | `on_auth_user_created` | AFTER INSERT | `auth.users` | `handle_new_user()` | Membuatkan otomatis baris `user_profiles` dan memanggil `seed_default_categories(id)` |
+
+#### 1. `update_budget_spent_amount()` Trigger Definition
+Menghitung ulang `budget_items.spent_amount` secara reaktif saat ada transaksi `expense` yang dimasukkan, diubah, atau dihapus:
+
+```sql
+CREATE OR REPLACE FUNCTION public.update_budget_spent_amount()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_budget_id uuid;
+  v_category_id uuid;
+  v_amount bigint;
+  v_transaction_date date;
+BEGIN
+  -- Handle INSERT
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.type = 'expense' AND NEW.category_id IS NOT NULL THEN
+      UPDATE public.budget_items bi
+      SET 
+        spent_amount = spent_amount + NEW.amount,
+        updated_at = now()
+      FROM public.budgets b
+      WHERE bi.budget_id = b.id
+        AND bi.category_id = NEW.category_id
+        AND b.user_id = NEW.user_id
+        AND b.is_active = true
+        AND NEW.transaction_date BETWEEN b.start_date AND b.end_date;
+    END IF;
+    RETURN NEW;
+  
+  -- Handle UPDATE
+  ELSIF TG_OP = 'UPDATE' THEN
+    IF OLD.type = 'expense' AND OLD.category_id IS NOT NULL THEN
+      UPDATE public.budget_items bi
+      SET 
+        spent_amount = GREATEST(0, spent_amount - OLD.amount),
+        updated_at = now()
+      FROM public.budgets b
+      WHERE bi.budget_id = b.id
+        AND bi.category_id = OLD.category_id
+        AND b.user_id = OLD.user_id
+        AND b.is_active = true
+        AND OLD.transaction_date BETWEEN b.start_date AND b.end_date;
+    END IF;
+    
+    IF NEW.type = 'expense' AND NEW.category_id IS NOT NULL THEN
+      UPDATE public.budget_items bi
+      SET 
+        spent_amount = spent_amount + NEW.amount,
+        updated_at = now()
+      FROM public.budgets b
+      WHERE bi.budget_id = b.id
+        AND bi.category_id = NEW.category_id
+        AND b.user_id = NEW.user_id
+        AND b.is_active = true
+        AND NEW.transaction_date BETWEEN b.start_date AND b.end_date;
+    END IF;
+    RETURN NEW;
+  
+  -- Handle DELETE
+  ELSIF TG_OP = 'DELETE' THEN
+    IF OLD.type = 'expense' AND OLD.category_id IS NOT NULL THEN
+      UPDATE public.budget_items bi
+      SET 
+        spent_amount = GREATEST(0, spent_amount - OLD.amount),
+        updated_at = now()
+      FROM public.budgets b
+      WHERE bi.budget_id = b.id
+        AND bi.category_id = OLD.category_id
+        AND b.user_id = OLD.user_id
+        AND b.is_active = true
+        AND OLD.transaction_date BETWEEN b.start_date AND b.end_date;
+    END IF;
+    RETURN OLD;
+  END IF;
+  
+  RETURN NULL;
+END;
+$$;
+
+-- Trigger Attachments:
+CREATE TRIGGER on_transaction_insert_update_budget
+    AFTER INSERT ON public.transactions
+    FOR EACH ROW EXECUTE FUNCTION public.update_budget_spent_amount();
+
+CREATE TRIGGER on_transaction_update_update_budget
+    AFTER UPDATE ON public.transactions
+    FOR EACH ROW EXECUTE FUNCTION public.update_budget_spent_amount();
+
+CREATE TRIGGER on_transaction_delete_update_budget
+    AFTER DELETE ON public.transactions
+    FOR EACH ROW EXECUTE FUNCTION public.update_budget_spent_amount();
+```
+
+#### 2. `check_budget_alert()` Trigger Definition
+Memeriksa ambang batas alokasi anggaran dan membuat notifikasi otomatis jika `spent_amount >= alert_threshold`:
+
+```sql
+CREATE OR REPLACE FUNCTION public.check_budget_alert()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_budget RECORD;
+  v_percentage INTEGER;
+  v_alert_threshold INTEGER;
+  v_existing_alert UUID;
+BEGIN
+  SELECT b.*, b.alert_threshold INTO v_budget
+  FROM public.budgets b
+  WHERE b.id = NEW.budget_id AND b.is_active = true;
+  
+  IF v_budget IS NULL THEN
+    RETURN NEW;
+  END IF;
+  
+  IF NEW.planned_amount > 0 THEN
+    v_percentage := (NEW.spent_amount * 100 / NEW.planned_amount);
+  ELSE
+    v_percentage := 0;
+  END IF;
+  
+  v_alert_threshold := COALESCE(v_budget.alert_threshold, 80);
+  
+  IF v_percentage >= v_alert_threshold THEN
+    -- Mencegah spam notifikasi: cek apakah notifikasi serupa sudah ada dalam 24 jam terakhir
+    SELECT id INTO v_existing_alert
+    FROM public.notifications
+    WHERE user_id = v_budget.user_id
+      AND type = 'budget_alert'
+      AND metadata->>'budget_item_id' = NEW.id::text
+      AND created_at > now() - interval '24 hours';
+    
+    IF v_existing_alert IS NULL THEN
+      IF v_percentage >= 100 THEN
+        PERFORM public.create_notification(
+          v_budget.user_id,
+          'budget_alert',
+          'Budget Melebihi Limit! 🚨',
+          format('Budget "%s" sudah melebihi limit sebesar %s%%', v_budget.name, v_percentage),
+          'i-lucide-alert-triangle',
+          'error',
+          '/budgets',
+          jsonb_build_object('budget_id', v_budget.id, 'budget_item_id', NEW.id, 'percentage', v_percentage)
+        );
+      ELSE
+        PERFORM public.create_notification(
+          v_budget.user_id,
+          'budget_alert',
+          'Peringatan Budget ⚠️',
+          format('Budget "%s" sudah mencapai %s%% dari limit', v_budget.name, v_percentage),
+          'i-lucide-alert-circle',
+          'warning',
+          '/budgets',
+          jsonb_build_object('budget_id', v_budget.id, 'budget_item_id', NEW.id, 'percentage', v_percentage)
+        );
+      END IF;
+    END IF;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trigger_check_budget_alert
+    AFTER UPDATE ON public.budget_items
+    FOR EACH ROW EXECUTE FUNCTION public.check_budget_alert();
+```
+
+#### 3. `check_low_balance()` Trigger Definition
+Memeriksa saldo sumber dana saat terjadi penurunan nilai di bawah ambang batas (default: Rp 100.000 / 100000 cents):
+
+```sql
+CREATE OR REPLACE FUNCTION public.check_low_balance()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_threshold BIGINT := 100000; -- Rp 100.000
+  v_existing_alert UUID;
+BEGIN
+  IF NEW.balance < v_threshold AND OLD.balance >= v_threshold THEN
+    SELECT id INTO v_existing_alert
+    FROM public.notifications
+    WHERE user_id = NEW.user_id
+      AND type = 'low_balance'
+      AND metadata->>'fund_source_id' = NEW.id::text
+      AND created_at > now() - interval '24 hours';
+    
+    IF v_existing_alert IS NULL THEN
+      PERFORM public.create_notification(
+        NEW.user_id,
+        'low_balance',
+        'Saldo Rendah 💰',
+        format('Saldo "%s" tinggal %s', NEW.name, 'Rp ' || to_char(NEW.balance, 'FM999,999,999')),
+        'i-lucide-wallet',
+        'warning',
+        '/fund-sources',
+        jsonb_build_object('fund_source_id', NEW.id, 'balance', NEW.balance)
+      );
+    END IF;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trigger_check_low_balance
+    AFTER UPDATE ON public.fund_sources
+    FOR EACH ROW EXECUTE FUNCTION public.check_low_balance();
+```
+
+#### 4. `check_goal_milestone()` Trigger Definition
+Memeriksa pencapaian persentase milestone tabungan finansial (25%, 50%, 75%, 100%):
+
+```sql
+CREATE OR REPLACE FUNCTION public.check_goal_milestone()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_old_percentage INTEGER;
+  v_new_percentage INTEGER;
+  v_milestone INTEGER;
+  v_milestones INTEGER[] := ARRAY[25, 50, 75, 100];
+  v_existing_alert UUID;
+BEGIN
+  IF NEW.target_amount > 0 THEN
+    v_old_percentage := (OLD.current_amount * 100 / NEW.target_amount);
+    v_new_percentage := (NEW.current_amount * 100 / NEW.target_amount);
+  ELSE
+    RETURN NEW;
+  END IF;
+  
+  FOREACH v_milestone IN ARRAY v_milestones
+  LOOP
+    IF v_new_percentage >= v_milestone AND v_old_percentage < v_milestone THEN
+      SELECT id INTO v_existing_alert
+      FROM public.notifications
+      WHERE user_id = NEW.user_id
+        AND type = 'goal_progress'
+        AND metadata->>'goal_id' = NEW.id::text
+        AND metadata->>'milestone' = v_milestone::text;
+      
+      IF v_existing_alert IS NULL THEN
+        IF v_milestone = 100 THEN
+          PERFORM public.create_notification(
+            NEW.user_id,
+            'goal_progress',
+            'Goal Tercapai! 🎉',
+            format('Selamat! Goal "%s" sudah tercapai 100%%!', NEW.name),
+            'i-lucide-trophy',
+            'success',
+            '/goals',
+            jsonb_build_object('goal_id', NEW.id, 'milestone', v_milestone)
+          );
+        ELSE
+          PERFORM public.create_notification(
+            NEW.user_id,
+            'goal_progress',
+            format('Goal Progress %s%% 🎯', v_milestone),
+            format('Goal "%s" sudah mencapai %s%%!', NEW.name, v_milestone),
+            'i-lucide-target',
+            'primary',
+            '/goals',
+            jsonb_build_object('goal_id', NEW.id, 'milestone', v_milestone)
+          );
+        END IF;
+      END IF;
+    END IF;
+  END LOOP;
+  
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trigger_check_goal_milestone
+    AFTER UPDATE ON public.financial_goals
+    FOR EACH ROW EXECUTE FUNCTION public.check_goal_milestone();
+```
 
 ---
 
@@ -983,20 +1628,46 @@ Tabel-tabel berikut ditambahkan ke publikasi `supabase_realtime` sehingga antarm
 - `public.fund_sources` (Live balance update di kartu saldo akun)
 
 ### 7.2 Initial Category Seed (`seed_default_categories`)
-Saat user baru pertama kali mendaftar, trigger memanggil fungsi `seed_default_categories(p_user_id UUID)` yang secara otomatis membuatkan kategori standar bisnis/pribadi:
+Saat user baru pertama kali mendaftar, trigger memanggil fungsi `seed_default_categories(p_user_id UUID)` yang secara otomatis membuatkan taksonomi kategori standar dengan hierarki induk-anak (*parent-child*):
 
-- **Income Categories**:
-  - `Penjualan Produk` (icon: `shopping-bag`, color: `#10B981`)
-  - `Jasa / Layanan` (icon: `briefcase`, color: `#06B6D4`)
-  - `Investasi / Pasif` (icon: `trending-up`, color: `#8B5CF6`)
-  - `Lain-lain (Pendapatan)` (icon: `plus-circle`, color: `#6B7280`)
-- **Expense Categories**:
-  - `Operasional Kantor` (icon: `building`, color: `#EF4444`)
-  - `Gaji & Upah` (icon: `users`, color: `#F59E0B`)
-  - `Pemasaran & Iklan` (icon: `megaphone`, color: `#EC4899`)
-  - `Pajak & Legal` (icon: `file-text`, color: `#6366F1`)
-  - `Transportasi & Logistik` (icon: `truck`, color: `#14B8A6`)
-  - `Lain-lain (Pengeluaran)` (icon: `minus-circle`, color: `#9CA3AF`)
+#### A. Kategori Pengeluaran (`expense`)
+1. **Makanan & Minuman** (`#f97316`, `i-lucide-utensils`)
+   - ↳ `Makan Siang`
+   - ↳ `Makan Malam`
+   - ↳ `Groceries` (Belanja bulanan bahan makanan)
+   - ↳ `Kopi & Snack`
+2. **Transportasi** (`#3b82f6`, `i-lucide-car`)
+   - ↳ `Bensin`
+   - ↳ `Parkir`
+   - ↳ `Ojek Online`
+   - ↳ `Angkutan Umum`
+3. **Belanja** (`#a855f7`, `i-lucide-shopping-bag`)
+4. **Tagihan & Utilitas** (`#eab308`, `i-lucide-zap`)
+   - ↳ `Listrik`
+   - ↳ `Air PDAM`
+   - ↳ `Internet`
+   - ↳ `Pulsa & Paket Data`
+5. **Rumah** (`#78716c`, `i-lucide-home` — sewa/cicilan/perabotan)
+6. **Kesehatan** (`#ef4444`, `i-lucide-heart-pulse` — obat/dokter/asuransi)
+7. **Hiburan** (`#22c55e`, `i-lucide-gamepad-2`)
+   - ↳ `Streaming` (Netflix, Spotify, YouTube Premium)
+   - ↳ `Game` (In-app purchases, game subscriptions)
+8. **Pendidikan** (`#0ea5e9`, `i-lucide-graduation-cap` — kursus/buku)
+9. **Hadiah & Donasi** (`#d946ef`, `i-lucide-gift` — zakat/sumbangan)
+10. **Lainnya** (`#6b7280`, `i-lucide-more-horizontal`)
+
+#### B. Kategori Pemasukan (`income`)
+1. **Gaji** (`#10b981`, `i-lucide-briefcase`)
+   - ↳ `Gaji Pokok`
+   - ↳ `Bonus` (Bonus tahunan, THR)
+   - ↳ `Lembur`
+2. **Freelance** (`#3b82f6`, `i-lucide-laptop` — proyek sampingan & konsultasi)
+3. **Investasi** (`#8b5cf6`, `i-lucide-trending-up`)
+   - ↳ `Dividen` (Dividen saham/reksa dana)
+   - ↳ `Bunga Deposito`
+4. **Bisnis** (`#f59e0b`, `i-lucide-store` — profit usaha / omset penjualan)
+5. **Hadiah** (`#ec4899`, `i-lucide-gift` — cashback, hadiah, reward)
+6. **Lainnya** (`#6b7280`, `i-lucide-more-horizontal`)
 
 ---
 
