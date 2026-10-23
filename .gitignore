@@ -26,3 +26,8 @@ dist-ssr
 # Environment variables
 .env
 .env*.local
+
+# Backups and scratch debug files
+*.backup
+debug-*.ts
+

@@ -52,7 +52,6 @@ import {
   Trash2,
   Wallet,
 } from "lucide-react";
-import { P } from "node_modules/framer-motion/dist/types.d-BJcRxCew";
 import { useEffect, useState } from "react";
 
 const ListSkeleton = () => (

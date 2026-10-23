@@ -57,7 +57,7 @@ describe('Storage', () => {
 
   describe('categoryStorage', () => {
     it('creates a category', async () => {
-      const mockCategory = { id: 'cat1', name: 'Food', user_id: 'user1', created_at: new Date().toISOString() };
+      const mockCategory = { id: 'cat1', name: 'Food', user_id: 'user1', type: 'expense', created_at: new Date().toISOString() };
       (supabase.from as any).mockReturnValue({
         insert: vi.fn().mockReturnValue({
           select: vi.fn().mockResolvedValue({ data: [mockCategory], error: null }),
@@ -77,12 +77,31 @@ describe('Storage', () => {
     });
 
     it('creates a subcategory', async () => {
-      const mockCategory = { id: 'cat2', name: 'Groceries', user_id: 'user1', created_at: new Date().toISOString(), parent_id: 'cat1' };
+      const mockCategory = { 
+        id: 'cat2', 
+        name: 'Groceries', 
+        user_id: 'user1', 
+        type: 'expense',
+        created_at: new Date().toISOString(), 
+        parent_id: 'cat1' 
+      };
       (supabase.from as any).mockReturnValue({
         insert: vi.fn().mockReturnValue({
           select: vi.fn().mockResolvedValue({ data: [mockCategory], error: null }),
         }),
       });
+
+      const category = await categoryStorage.create('Groceries', 'user1', 'expense', 'cat1');
+
+      expect(category).toEqual({
+        id: 'cat2',
+        name: 'Groceries',
+        userId: 'user1',
+        type: 'expense',
+        parentId: 'cat1',
+        createdAt: mockCategory.created_at,
+      });
+    });
   });
 
   describe('fundSourceStorage', () => {
@@ -112,16 +131,25 @@ describe('Storage', () => {
         id: 't1',
         description: 'Lunch',
         amount: 50000,
-        type: 'expense',
+        type: 'expense' as const,
         transaction_date: new Date().toISOString(),
         user_id: 'user1',
         category_id: 'cat1',
-        fund_source_id: 'fs1',
+        source_fund_id: 'fs1',
+        destination_fund_id: null,
         created_at: new Date().toISOString(),
       };
       (supabase.from as any).mockReturnValue({
-        insert: vi.fn().mockReturnValue({
-          select: vi.fn().mockResolvedValue({ data: [mockTransaction], error: null }),
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({ data: { balance: 10000000 }, error: null }),
+          }),
+        }),
+      });
+
+      (supabase.rpc as any).mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({ data: mockTransaction, error: null }),
         }),
       });
 
@@ -143,7 +171,8 @@ describe('Storage', () => {
         transactionDate: mockTransaction.transaction_date,
         userId: 'user1',
         categoryId: 'cat1',
-        fundSourceId: 'fs1',
+        sourceFundId: 'fs1',
+        destinationFundId: null,
         createdAt: mockTransaction.created_at,
       });
     });

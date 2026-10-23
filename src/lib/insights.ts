@@ -1,4 +1,5 @@
 import { Transaction, Category } from '@/types/finance';
+import { formatCurrency } from '@/lib/currency';
 
 interface FinancialInsight {
   title: string;
@@ -155,12 +156,4 @@ export const generateInsights = (
   
   // Limit to 5 insights
   return insights.slice(0, 5);
-};
-
-const formatCurrency = (amountInCents: number): string => {
-  const amount = amountInCents / 100;
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-  }).format(amount);
 };

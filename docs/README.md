@@ -47,4 +47,6 @@ For developers who want to understand the technical implementation of the projec
 
 Stay up-to-date with the latest changes and new features.
 
+- [**2026-10-23 Remediation & Compatibility**](./changelogs/2026-10-23_BUGFIX_AND_SUPABASE_COMPATIBILITY.md) - Bug fixes, Supabase RPC compatibility, test suite recovery, and bundle optimization.
 - [**v1.0.0**](./changelogs/v1.0.0.md) - The initial release of the application.
+
