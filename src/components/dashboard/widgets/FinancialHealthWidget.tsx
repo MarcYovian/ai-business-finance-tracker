@@ -83,7 +83,7 @@ export function FinancialHealthWidget({
     return Math.max(0, Math.min(100, rate));
   }, [monthlyIncome, monthlyExpenses]);
 
-  // 4. Status kesehatan & konfigurasi banner bawah
+  // 4. Status kesehatan & konfigurasi visual
   const healthStatus = useMemo(() => {
     if (monthlyIncome <= 0) {
       return {
@@ -97,7 +97,7 @@ export function FinancialHealthWidget({
         iconBg: 'bg-[#FCE7D8]',
         iconColor: 'text-[#D86927]',
         bannerTitle: 'Belum ada catatan pemasukan',
-        bannerSubtitle: 'Catat pemasukan di bulan ini untuk melihat kesehatan finansial Anda.',
+        bannerSubtitle: 'Catat pemasukan bulan ini untuk melihat kesehatan finansial.',
         actionIcon: Lightbulb,
       };
     }
@@ -112,8 +112,8 @@ export function FinancialHealthWidget({
         bannerBorder: 'border-[#E2F0DC]',
         iconBg: 'bg-[#E7F5E0]',
         iconColor: 'text-[#3E7418]',
-        bannerTitle: 'Arus kas surplus dan sangat ideal',
-        bannerSubtitle: 'Pertahankan rasio tabungan untuk memperkuat dana cadangan bisnis.',
+        bannerTitle: 'Arus kas surplus & ideal',
+        bannerSubtitle: 'Pertahankan rasio tabungan untuk memperkuat cadangan.',
         actionIcon: Sparkles,
       };
     }
@@ -129,7 +129,7 @@ export function FinancialHealthWidget({
         iconBg: 'bg-[#EFF5DE]',
         iconColor: 'text-[#688E23]',
         bannerTitle: 'Arus kas stabil & terjaga',
-        bannerSubtitle: 'Porsi tabungan berjalan baik, terus pantau pos pengeluaran operasional.',
+        bannerSubtitle: 'Porsi tabungan berjalan baik, terus pantau biaya operasional.',
         actionIcon: Sparkles,
       };
     }
@@ -143,71 +143,71 @@ export function FinancialHealthWidget({
       bannerBorder: 'border-[#F9ECE0]',
       iconBg: 'bg-[#FCE7D8]',
       iconColor: 'text-[#D86927]',
-      bannerTitle: 'Pengeluaran mendekati pemasukan',
-      bannerSubtitle: 'Pertimbangkan untuk menekan biaya non-esensial agar rasio tabungan naik.',
+      bannerTitle: 'Pengeluaran mendekati omzet',
+      bannerSubtitle: 'Pertimbangkan menekan biaya agar rasio tabungan naik.',
       actionIcon: Lightbulb,
     };
   }, [monthlyIncome, savingsRate]);
 
-  // Keliling busur setengah lingkaran (R = 65, L = PI * 65 ≈ 204.2)
-  const arcTotalLength = 204.2;
+  // Keliling busur setengah lingkaran (R = 60, L = PI * 60 ≈ 188.5)
+  const arcTotalLength = 188.5;
   const strokeDashoffset = arcTotalLength * (1 - savingsRate / 100);
   const ActionIcon = healthStatus.actionIcon;
 
   return (
-    <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#E5EAE3] shadow-sm flex flex-col justify-between h-full">
-      <div className="space-y-4">
+    <div className="bg-white rounded-2xl p-4 border border-[#E5EAE3] shadow-sm flex flex-col justify-between h-full overflow-hidden">
+      <div>
         {/* 1. Header Row: Heart Icon + Title/Subtitle + Status Badge */}
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between gap-1.5 pb-1">
+          <div className="flex items-center gap-2 min-w-0">
             {/* Heartpulse Icon Box */}
-            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-[#EAF5E9] flex items-center justify-center text-[#2F7B38] shrink-0">
-              <HeartPulse className="h-6 w-6 stroke-[2.2]" />
+            <div className="w-8 h-8 rounded-xl bg-[#EAF5E9] flex items-center justify-center text-[#2F7B38] shrink-0">
+              <HeartPulse className="h-4 w-4 stroke-[2.2]" />
             </div>
 
-            <div>
-              <h3 className="font-extrabold text-[16px] sm:text-[18px] text-[#161F18] font-sans tracking-tight leading-tight">
+            <div className="min-w-0">
+              <h4 className="font-bold text-[13px] text-[#161F18] leading-tight truncate">
                 Kesehatan Finansial
-              </h3>
-              <p className="text-[12px] sm:text-[13px] text-[#78857B] font-medium leading-tight mt-0.5">
+              </h4>
+              <span className="text-[10px] text-[#8A958C] block truncate leading-tight mt-0.5">
                 Rasio tabungan ({currentMonthLabel})
-              </p>
+              </span>
             </div>
           </div>
 
-          {/* Status Badge Pill */}
+          {/* Compact Status Badge Pill */}
           <div
-            className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1.5 shrink-0 ${healthStatus.badgeBg} ${healthStatus.badgeText}`}
+            className={`px-2 py-0.5 rounded-full text-[9.5px] font-bold flex items-center gap-1 shrink-0 ${healthStatus.badgeBg} ${healthStatus.badgeText}`}
           >
-            <AlertCircle className={`h-3.5 w-3.5 ${healthStatus.badgeIconColor}`} />
-            <span>{healthStatus.badgeLabel}</span>
+            <AlertCircle className={`h-2.5 w-2.5 ${healthStatus.badgeIconColor}`} />
+            <span className="truncate">{healthStatus.badgeLabel}</span>
           </div>
         </div>
 
         {/* 2. Total Saldo Kas Aktif & MoM Change Pill */}
-        <div className="pt-1">
-          <div className="flex items-center gap-1 text-[12px] sm:text-[12.5px] text-[#7A867D] font-medium">
+        <div className="mt-2.5">
+          <div className="flex items-center gap-1 text-[10px] text-[#8A958C] font-medium">
             <span>Total Saldo Kas Aktif</span>
-            <Info className="h-3.5 w-3.5 text-[#98A39B] cursor-help" />
+            <Info className="h-3 w-3 text-[#98A39B] cursor-help shrink-0" />
           </div>
 
-          <div className="text-[28px] sm:text-[32px] font-black text-[#161F18] font-sans tracking-tight leading-tight mt-0.5">
+          <div className="text-[20px] font-extrabold text-[#161F18] font-sans tracking-tight leading-tight mt-0.5 truncate">
             {formatRupiah(totalFundBalance)}
           </div>
 
           {/* Growth Pill */}
-          <div className="mt-1.5">
+          <div className="mt-1">
             <span
-              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] font-bold ${
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold ${
                 momChange >= 0
                   ? 'bg-[#EAF6EA] text-[#2F7B38]'
                   : 'bg-[#FDF1E8] text-[#C25827]'
               }`}
             >
               {momChange >= 0 ? (
-                <ArrowUp className="h-3 w-3 stroke-[2.5]" />
+                <ArrowUp className="h-2.5 w-2.5 stroke-[2.5]" />
               ) : (
-                <ArrowDown className="h-3 w-3 stroke-[2.5]" />
+                <ArrowDown className="h-2.5 w-2.5 stroke-[2.5]" />
               )}
               <span>{Math.abs(momChange)}%</span>
               <span className="font-normal text-[#556A58] ml-0.5">
@@ -218,25 +218,25 @@ export function FinancialHealthWidget({
         </div>
 
         {/* 3. Semicircle Dynamic Gauge Graphic */}
-        <div className="relative flex flex-col items-center justify-center pt-2">
-          <svg className="w-48 sm:w-56 h-28 sm:h-32 overflow-visible" viewBox="0 0 180 100">
+        <div className="relative flex flex-col items-center justify-center my-2">
+          <svg className="w-36 h-20 overflow-visible" viewBox="0 0 160 90">
             {/* Background Semicircle Track */}
             <path
-              d="M 25 85 A 65 65 0 0 1 155 85"
+              d="M 20 80 A 60 60 0 0 1 140 80"
               fill="none"
-              stroke="#E5EBE5"
+              stroke="#EAEFE6"
               strokeLinecap="round"
-              strokeWidth="15"
+              strokeWidth="13"
             />
 
             {/* Dynamic Colored Foreground Arc */}
             {savingsRate > 0 && (
               <path
-                d="M 25 85 A 65 65 0 0 1 155 85"
+                d="M 20 80 A 60 60 0 0 1 140 80"
                 fill="none"
                 stroke={healthStatus.color}
                 strokeLinecap="round"
-                strokeWidth="15"
+                strokeWidth="13"
                 strokeDasharray={arcTotalLength}
                 strokeDashoffset={strokeDashoffset}
                 className="transition-all duration-700 ease-out"
@@ -245,11 +245,11 @@ export function FinancialHealthWidget({
           </svg>
 
           {/* Centered Percentage Inside Arc */}
-          <div className="text-center -mt-12 sm:-mt-14 z-10">
-            <span className="font-black text-[28px] sm:text-[32px] text-[#161F18] font-sans block leading-none tracking-tight">
+          <div className="text-center -mt-8 z-10">
+            <span className="font-extrabold text-[20px] text-[#172019] font-sans block leading-none">
               {savingsRate}%
             </span>
-            <div className="text-[11.5px] sm:text-[12px] text-[#556358] font-medium leading-tight mt-1">
+            <div className="text-[9.5px] text-[#7A857D] leading-tight mt-1">
               <div>dari pemasukan</div>
               <div>disimpan</div>
             </div>
@@ -260,27 +260,27 @@ export function FinancialHealthWidget({
       {/* 4. Bottom Contextual Banner Callout */}
       <div
         onClick={() => navigate('/transactions')}
-        className={`mt-4 p-3 rounded-2xl border ${healthStatus.bannerBg} ${healthStatus.bannerBorder} flex items-center justify-between gap-2.5 cursor-pointer hover:opacity-90 transition-opacity`}
+        className={`mt-2 p-2.5 rounded-xl border ${healthStatus.bannerBg} ${healthStatus.bannerBorder} flex items-center justify-between gap-2 cursor-pointer hover:opacity-90 transition-opacity`}
         title="Buka Halaman Transaksi"
       >
-        <div className="flex items-center gap-2.5 min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
           <div
-            className={`w-9 h-9 rounded-full ${healthStatus.iconBg} ${healthStatus.iconColor} flex items-center justify-center shrink-0`}
+            className={`w-7 h-7 rounded-full ${healthStatus.iconBg} ${healthStatus.iconColor} flex items-center justify-center shrink-0`}
           >
-            <ActionIcon className="h-4 w-4" />
+            <ActionIcon className="h-3.5 w-3.5" />
           </div>
 
           <div className="min-w-0">
-            <span className="text-[12px] font-bold text-[#231A14] block leading-tight truncate">
+            <span className="text-[11px] font-bold text-[#231A14] block leading-tight truncate">
               {healthStatus.bannerTitle}
             </span>
-            <span className="text-[10.5px] text-[#7B6E66] block leading-tight truncate mt-0.5">
+            <span className="text-[9.5px] text-[#7B6E66] block leading-tight truncate mt-0.5">
               {healthStatus.bannerSubtitle}
             </span>
           </div>
         </div>
 
-        <ChevronRight className="h-4 w-4 text-[#C27D56] shrink-0" />
+        <ChevronRight className="h-3.5 w-3.5 text-[#C27D56] shrink-0" />
       </div>
     </div>
   );
