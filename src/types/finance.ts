@@ -1,5 +1,5 @@
 export type TransactionType = "income" | "expense" | "transfer";
-export type FundType = "bank" | "cash" | "other";
+export type FundType = "bank" | "cash" | "credit_card" | "wallet" | "other";
 
 export interface User {
   id: string;
@@ -23,6 +23,11 @@ export interface FundSource {
   type: FundType;
   balance: number;
   created_at: string;
+  account_number?: string | null;
+  account_holder_name?: string | null;
+  card_expiry?: string | null;
+  color_theme?: string | null;
+  is_active?: boolean;
 }
 
 export interface Budget {
@@ -64,6 +69,18 @@ export interface Transaction {
   destinationFundId?: string;
   fee?: number;
   parentTransactionId?: string;
+}
+
+export interface Beneficiary {
+  id: string;
+  user_id: string;
+  name: string;
+  bank_name: string;
+  account_number: string;
+  account_type: 'bank' | 'ewallet';
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface AIResponse {

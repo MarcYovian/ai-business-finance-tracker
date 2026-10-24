@@ -33,6 +33,7 @@
    - 3.7 [`recurring_patterns`](#37-recurring_patterns-scheduled-automations)
    - 3.8 [`financial_goals`](#38-financial_goals-saving-targets--milestones)
    - 3.9 [`notifications`](#39-notifications-system--budget-alerts)
+   - 3.10 [`beneficiaries`](#310-beneficiaries-buku-rekening--kontak-transfer)
 4. [Database Functions (RPC) & Automated Triggers](#4-database-functions-rpc--automated-triggers)
    - 4.1 [Compatibility RPCs (Frontend Standard API)](#41-compatibility-rpcs-frontend-standard-api)
    - 4.2 [Native Ledger & Mutation RPCs](#42-native-ledger--mutation-rpcs)
@@ -295,6 +296,10 @@ CREATE TABLE public.fund_sources (
     currency TEXT NOT NULL DEFAULT 'IDR'::text,
     description TEXT,
     is_active BOOLEAN NOT NULL DEFAULT true,
+    account_number VARCHAR(50),
+    account_holder_name VARCHAR(100),
+    card_expiry VARCHAR(10),
+    color_theme VARCHAR(30) DEFAULT 'lime',
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
@@ -305,12 +310,16 @@ CREATE TABLE public.fund_sources (
 | :--- | :--- | :--- | :--- | :--- |
 | `id` | `uuid` | NO | `gen_random_uuid()` | Primary key sumber dana |
 | `user_id` | `uuid` | NO | - | Pemilik akun, FK ke `auth.users(id)` |
-| `name` | `text` | NO | - | Nama rekening/dompet (mis. `"BCA Bisnis"`, `"GoPay"`, `"Kas Tunai"`) |
+| `name` | `text` | NO | - | Nama rekening/dompet (mis. `"BCA"`, `"Mandiri"`, `"Kas Tunai"`) |
 | `type` | `text` | NO | - | Tipe instrumen: `'bank'`, `'cash'`, `'credit_card'`, `'wallet'`, `'other'` |
 | `balance` | `bigint` | NO | `0` | **Saldo terkini dalam satuan cents**. Wajib diubah via RPC |
 | `currency` | `text` | NO | `'IDR'` | Kode ISO mata uang akun |
-| `description`| `text` | YES | `NULL` | Catatan opsional nomor rekening atau institusi |
+| `description`| `text` | YES | `NULL` | Catatan opsional keterangan akun |
 | `is_active` | `boolean` | NO | `true` | Status keaktifan sumber dana |
+| `account_number` | `varchar(50)` | YES | `NULL` | Nomor rekening bank atau nomor akun e-wallet (masked di UI) |
+| `account_holder_name` | `varchar(100)` | YES | `NULL` | Nama pemilik rekening yang tertera di kartu |
+| `card_expiry` | `varchar(10)` | YES | `NULL` | Masa berlaku kartu debit/kredit (mis. `'03/30'`) |
+| `color_theme` | `varchar(30)` | YES | `'lime'` | Tema warna kartu saat di-slide (`'lime'`, `'dark'`, `'blue'`, `'peach'`) |
 | `created_at` | `timestamptz`| NO | `now()` | Waktu pembuatan akun |
 | `updated_at` | `timestamptz`| NO | `now()` | Waktu update terakhir |
 
@@ -606,6 +615,53 @@ CREATE TABLE public.notifications (
 | `is_read` | `boolean` | YES | `false` | Status terbaca oleh pengguna |
 | `metadata` | `jsonb` | YES | `'{}'` | Payload JSON opsional (id budget, id transaksi, dsb.) |
 | `created_at` | `timestamptz`| YES | `now()` | Waktu notifikasi dipancarkan |
+
+---
+
+### 3.10 `beneficiaries` (Buku Rekening & Kontak Transfer)
+- **Tujuan**: Menyimpan catatan nomor rekening bank dan nomor telepon e-wallet orang/vendor yang sering ditransfer pengguna, memudahkan proses transfer dengan fitur 1-klik salin (*copy-to-clipboard*).
+- **Primary Key**: `id` (`uuid`)
+- **Foreign Keys**:
+  - `user_id` &rarr; `auth.users(id)` `ON DELETE CASCADE`
+
+#### DDL Lengkap
+```sql
+CREATE TABLE IF NOT EXISTS public.beneficiaries (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  name VARCHAR(100) NOT NULL,
+  bank_name VARCHAR(50) NOT NULL,
+  account_number VARCHAR(50) NOT NULL,
+  account_type VARCHAR(20) DEFAULT 'bank',
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- RLS & Indeks
+ALTER TABLE public.beneficiaries ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage their own beneficiaries"
+  ON public.beneficiaries
+  FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE INDEX IF NOT EXISTS idx_beneficiaries_user_id ON public.beneficiaries(user_id);
+```
+
+#### Kamus Data
+| Kolom | Tipe Data | Nullable | Default | Deskripsi |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `uuid` | NO | `gen_random_uuid()` | Primary key |
+| `user_id` | `uuid` | NO | - | Pemilik catatan kontak transfer, FK ke `auth.users(id)` |
+| `name` | `varchar(100)` | NO | - | Nama pemilik rekening penerima / kontak |
+| `bank_name` | `varchar(50)` | NO | - | Nama bank / e-wallet (BCA, Mandiri, BRI, BNI, GoPay, OVO, DANA, dll) |
+| `account_number` | `varchar(50)` | NO | - | Nomor rekening bank atau nomor HP e-wallet |
+| `account_type` | `varchar(20)` | YES | `'bank'` | Tipe rekening (`'bank'` atau `'ewallet'`) |
+| `notes` | `text` | YES | `NULL` | Catatan keperluan (mis. `'Vendor Bahan Baku'`, `'Freelance'`) |
+| `created_at` | `timestamptz` | YES | `now()` | Waktu kontak dibuat |
+| `updated_at` | `timestamptz` | YES | `now()` | Waktu kontak terakhir diubah |
 
 ---
 

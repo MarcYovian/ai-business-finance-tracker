@@ -1,4 +1,5 @@
 import {
+  Beneficiary,
   Budget,
   BudgetDetail,
   BudgetItem,
@@ -166,16 +167,23 @@ export const fundSourceStorage = {
     const { data, error } = await supabase
       .from("fund_sources")
       .select("*")
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true });
     if (error) throw error;
 
     return (
       data?.map((fundSource) => ({
         id: fundSource.id,
+        user_id: fundSource.user_id,
         name: fundSource.name,
+        type: fundSource.type,
         balance: fundSource.balance,
-        userId: fundSource.user_id,
-        createdAt: fundSource.created_at,
+        account_number: fundSource.account_number,
+        account_holder_name: fundSource.account_holder_name,
+        card_expiry: fundSource.card_expiry,
+        color_theme: fundSource.color_theme,
+        is_active: fundSource.is_active,
+        created_at: fundSource.created_at,
       })) || []
     );
   },
@@ -183,11 +191,24 @@ export const fundSourceStorage = {
   create: async (
     name: string,
     balance: number,
-    userId: string
+    userId: string,
+    extra?: Partial<FundSource>
   ): Promise<FundSource> => {
+    const payload = {
+      name,
+      balance,
+      user_id: userId,
+      type: extra?.type || "bank",
+      account_number: extra?.account_number || null,
+      account_holder_name: extra?.account_holder_name || null,
+      card_expiry: extra?.card_expiry || null,
+      color_theme: extra?.color_theme || "lime",
+      is_active: extra?.is_active ?? true,
+    };
+
     const { data, error } = await supabase
       .from("fund_sources")
-      .insert([{ name, balance, user_id: userId }])
+      .insert([payload])
       .select();
     if (error) throw error;
 
@@ -203,8 +224,14 @@ export const fundSourceStorage = {
 
   update: async (id: string, updates: Partial<FundSource>): Promise<void> => {
     const updatesForDb: { [key: string]: any } = {};
-    if (updates.name) updatesForDb.name = updates.name;
-    if (updates.balance) updatesForDb.balance = updates.balance;
+    if (updates.name !== undefined) updatesForDb.name = updates.name;
+    if (updates.balance !== undefined) updatesForDb.balance = updates.balance;
+    if (updates.type !== undefined) updatesForDb.type = updates.type;
+    if (updates.account_number !== undefined) updatesForDb.account_number = updates.account_number;
+    if (updates.account_holder_name !== undefined) updatesForDb.account_holder_name = updates.account_holder_name;
+    if (updates.card_expiry !== undefined) updatesForDb.card_expiry = updates.card_expiry;
+    if (updates.color_theme !== undefined) updatesForDb.color_theme = updates.color_theme;
+    if (updates.is_active !== undefined) updatesForDb.is_active = updates.is_active;
 
     const { error } = await supabase
       .from("fund_sources")
@@ -561,5 +588,38 @@ export const aiConfigStorage = {
     return provider === "gemini"
       ? aiConfigStorage.getGeminiKey()
       : aiConfigStorage.getOpenAIKey();
+  },
+};
+
+// Beneficiary / Transfer Contacts operations
+export const beneficiaryStorage = {
+  getAll: async (userId: string): Promise<Beneficiary[]> => {
+    const { data, error } = await supabase
+      .from("beneficiaries")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data as Beneficiary[]) || [];
+  },
+
+  create: async (
+    payload: Omit<Beneficiary, "id" | "created_at" | "updated_at">
+  ): Promise<Beneficiary> => {
+    const { data, error } = await supabase
+      .from("beneficiaries")
+      .insert([payload])
+      .select()
+      .single();
+    if (error) throw error;
+    return data as Beneficiary;
+  },
+
+  delete: async (id: string): Promise<void> => {
+    const { error } = await supabase
+      .from("beneficiaries")
+      .delete()
+      .eq("id", id);
+    if (error) throw error;
   },
 };
