@@ -4,6 +4,7 @@ import {
   BudgetDetail,
   BudgetItem,
   Category,
+  FinancialGoal,
   FundSource,
   Transaction,
   User,
@@ -659,3 +660,95 @@ export const beneficiaryStorage = {
     if (error) throw error;
   },
 };
+
+// Financial Goals operations
+export const financialGoalsStorage = {
+  getAll: async (userId: string): Promise<FinancialGoal[]> => {
+    if (!userId) return [];
+    const { data, error } = await supabase
+      .from("financial_goals")
+      .select("*")
+      .eq("user_id", userId)
+      .order("priority", { ascending: false })
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error("Error fetching financial goals:", error);
+      throw error;
+    }
+
+    return (data || []).map((goal: any) => ({
+      id: goal.id,
+      user_id: goal.user_id,
+      name: goal.name,
+      description: goal.description,
+      target_amount: Number(goal.target_amount) / 100,
+      current_amount: Number(goal.current_amount || 0) / 100,
+      category: goal.category,
+      target_date: goal.target_date,
+      status: goal.status,
+      priority: goal.priority ?? 0,
+      created_at: goal.created_at,
+      updated_at: goal.updated_at,
+    }));
+  },
+
+  upsert: async (
+    goal: Omit<FinancialGoal, "id" | "created_at" | "updated_at"> & { id?: string }
+  ): Promise<FinancialGoal> => {
+    const payload: any = {
+      user_id: goal.user_id,
+      name: goal.name,
+      description: goal.description || null,
+      target_amount: Math.round(Number(goal.target_amount) * 100),
+      current_amount: Math.round(Number(goal.current_amount || 0) * 100),
+      category: goal.category || "savings",
+      target_date: goal.target_date,
+      status: goal.status || "active",
+      priority: goal.priority ?? 0,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (goal.id) {
+      payload.id = goal.id;
+    }
+
+    const { data, error } = await supabase
+      .from("financial_goals")
+      .upsert([payload])
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error saving financial goal:", error);
+      throw error;
+    }
+
+    return {
+      id: data.id,
+      user_id: data.user_id,
+      name: data.name,
+      description: data.description,
+      target_amount: Number(data.target_amount) / 100,
+      current_amount: Number(data.current_amount || 0) / 100,
+      category: data.category,
+      target_date: data.target_date,
+      status: data.status,
+      priority: data.priority ?? 0,
+      created_at: data.created_at,
+      updated_at: data.updated_at,
+    };
+  },
+
+  delete: async (id: string): Promise<void> => {
+    const { error } = await supabase
+      .from("financial_goals")
+      .delete()
+      .eq("id", id);
+    if (error) {
+      console.error("Error deleting financial goal:", error);
+      throw error;
+    }
+  },
+};
+

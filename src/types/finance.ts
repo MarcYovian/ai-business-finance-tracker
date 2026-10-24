@@ -83,6 +83,24 @@ export interface Beneficiary {
   updated_at: string;
 }
 
+export type FinancialGoalCategory = 'savings' | 'investment' | 'debt_payoff' | 'other';
+export type FinancialGoalStatus = 'active' | 'completed' | 'cancelled';
+
+export interface FinancialGoal {
+  id: string;
+  user_id: string;
+  name: string;
+  description?: string | null;
+  target_amount: number; // in whole Rupiah
+  current_amount: number; // in whole Rupiah
+  category: FinancialGoalCategory;
+  target_date: string;
+  status: FinancialGoalStatus;
+  priority?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface AIResponse {
   clarification_needed?: string;
   type?: TransactionType;

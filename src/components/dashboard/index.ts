@@ -3,6 +3,7 @@ export * from './constants';
 export * from './hooks/useCashflowChartData';
 export * from './dialogs/AddBeneficiaryDialog';
 export * from './dialogs/CustomDateRangeDialog';
+export * from './dialogs/GoalDialog';
 export * from './DashboardSkeleton';
 export * from './widgets/CashflowChartWidget';
 export * from './widgets/MonthlyBudgetWidget';

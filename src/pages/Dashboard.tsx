@@ -105,6 +105,7 @@ export default function Dashboard() {
               />
               <FinancialGoalWidget
                 totalFundBalance={totalFundBalance}
+                userId={user?.id}
               />
             </div>
           </div>
