@@ -75,6 +75,7 @@ Arsitektur database **AI Business Finance Tracker** dirancang menggunakan prinsi
 | Domain | Tabel | Deskripsi |
 | :--- | :--- | :--- |
 | **Auth & Identity** | [`user_profiles`](#31-user_profiles-user-extended-profile) | Data profil pengguna terikat dengan Supabase Auth |
+| | [`user_preferences`](#311-user_preferences-app-preferences--ui-config) | Preferensi UI, tema, tampilan akun, dan notifikasi |
 | **Financial Structures**| [`fund_sources`](#32-fund_sources-accounts-wallets--cards) | Akun dompet, rekening bank, kartu kredit, dan kas tunai |
 | | [`categories`](#33-categories-hierarchical-financial-taxonomy) | Taksonomi hierarkis pendapatan dan pengeluaran |
 | **Journal Ledger** | [`transactions`](#34-transactions-double-entry-financial-ledger) | Catatan mutasi debit/kredit dan transfer saldo |
@@ -262,6 +263,11 @@ CREATE TABLE public.user_profiles (
     display_name TEXT,
     avatar_url TEXT,
     default_currency TEXT DEFAULT 'IDR'::text,
+    phone_number TEXT,
+    date_of_birth DATE,
+    date_format TEXT DEFAULT 'DD MMM YYYY'::text,
+    time_zone TEXT DEFAULT 'Asia/Jakarta'::text,
+    language TEXT DEFAULT 'en'::text,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
     CONSTRAINT user_profiles_user_id_key UNIQUE (user_id)
@@ -276,6 +282,11 @@ CREATE TABLE public.user_profiles (
 | `display_name` | `text` | YES | `NULL` | Nama lengkap atau nama tampilan pengguna |
 | `avatar_url` | `text` | YES | `NULL` | URI avatar foto profil pengguna |
 | `default_currency` | `text` | YES | `'IDR'` | Mata uang default akun (mis. `'IDR'`, `'USD'`) |
+| `phone_number` | `text` | YES | `NULL` | Nomor telepon kontak pengguna |
+| `date_of_birth` | `date` | YES | `NULL` | Tanggal lahir pengguna |
+| `date_format` | `text` | YES | `'DD MMM YYYY'` | Format tampilan tanggal pengguna |
+| `time_zone` | `text` | YES | `'Asia/Jakarta'` | Zona waktu lokasi pengguna |
+| `language` | `text` | YES | `'en'` | Preferensi bahasa aplikasi ('en', 'id') |
 | `created_at` | `timestamptz`| NO | `now()` | Waktu profil dibuat |
 | `updated_at` | `timestamptz`| NO | `now()` | Waktu pembaruan profil terakhir |
 
@@ -662,6 +673,72 @@ CREATE INDEX IF NOT EXISTS idx_beneficiaries_user_id ON public.beneficiaries(use
 | `notes` | `text` | YES | `NULL` | Catatan keperluan (mis. `'Vendor Bahan Baku'`, `'Freelance'`) |
 | `created_at` | `timestamptz` | YES | `now()` | Waktu kontak dibuat |
 | `updated_at` | `timestamptz` | YES | `now()` | Waktu kontak terakhir diubah |
+
+---
+
+### 3.11 `user_preferences` (App Preferences & UI Configuration)
+- **Tujuan**: Menyimpan konfigurasi preferensi tampilan aplikasi pengguna, tema, paging tabel, serta pengaturan filter dan toggle notifikasi.
+- **Primary Key**: `id` (`uuid`)
+- **Foreign Keys**:
+  - `user_id` &rarr; `auth.users(id)` `ON DELETE CASCADE` (`UNIQUE`)
+
+#### DDL Lengkap
+```sql
+CREATE TABLE IF NOT EXISTS public.user_preferences (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    theme TEXT NOT NULL DEFAULT 'light' CHECK (theme IN ('light', 'dark', 'system')),
+    default_landing_page TEXT NOT NULL DEFAULT '/dashboard',
+    items_per_page INTEGER NOT NULL DEFAULT 10 CHECK (items_per_page IN (10, 25, 50, 100)),
+    show_account_balance BOOLEAN NOT NULL DEFAULT true,
+    show_category_icons BOOLEAN NOT NULL DEFAULT true,
+    compact_mode BOOLEAN NOT NULL DEFAULT false,
+    email_notifications BOOLEAN NOT NULL DEFAULT true,
+    budget_alerts BOOLEAN NOT NULL DEFAULT true,
+    recurring_reminders BOOLEAN NOT NULL DEFAULT true,
+    low_balance_alerts BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    CONSTRAINT user_preferences_user_id_key UNIQUE (user_id)
+);
+
+-- RLS & Policies
+ALTER TABLE public.user_preferences ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "user_preferences_select_policy" 
+ON public.user_preferences FOR SELECT 
+TO public 
+USING (auth.uid() = user_id);
+
+CREATE POLICY "user_preferences_insert_policy" 
+ON public.user_preferences FOR INSERT 
+TO public 
+WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "user_preferences_update_policy" 
+ON public.user_preferences FOR UPDATE 
+TO public 
+USING (auth.uid() = user_id) 
+WITH CHECK (auth.uid() = user_id);
+```
+
+#### Kamus Data
+| Kolom | Tipe Data | Nullable | Default | Deskripsi |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `uuid` | NO | `gen_random_uuid()` | Primary key |
+| `user_id` | `uuid` | NO | - | Foreign key ke `auth.users(id)` (Unique 1-to-1) |
+| `theme` | `text` | NO | `'light'` | Tema tampilan UI (`'light'`, `'dark'`, `'system'`) |
+| `default_landing_page` | `text` | NO | `'/dashboard'` | Halaman default saat membuka aplikasi |
+| `items_per_page` | `integer` | NO | `10` | Jumlah baris data per halaman pada tabel |
+| `show_account_balance` | `boolean` | NO | `true` | Menampilkan atau menyembunyikan saldo di dashboard |
+| `show_category_icons` | `boolean` | NO | `true` | Menampilkan ikon kategori pada transaksi |
+| `compact_mode` | `boolean` | NO | `false` | Menggunakan tata letak kompak untuk daftar tabel |
+| `email_notifications` | `boolean` | NO | `true` | Status aktif notifikasi melalui email |
+| `budget_alerts` | `boolean` | NO | `true` | Peringatan pagu anggaran melampaui batas |
+| `recurring_reminders` | `boolean` | NO | `true` | Pengingat jadwal transaksi berkala |
+| `low_balance_alerts` | `boolean` | NO | `true` | Peringatan saldo akun menipis |
+| `created_at` | `timestamptz` | NO | `now()` | Waktu konfigurasi dibuat |
+| `updated_at` | `timestamptz` | NO | `now()` | Waktu pembaruan preferensi terakhir |
 
 ---
 
@@ -1180,6 +1257,17 @@ Fungsi tingkat lanjut native database yang digunakan untuk mutasi dan penyesuaia
   ```sql
   delete_transaction_with_balance_adjustment(p_transaction_id UUID) RETURNS BOOLEAN
   ```
+- **`reset_user_financial_data`**:
+  ```sql
+  reset_user_financial_data(
+      p_user_id UUID,
+      p_reset_transactions BOOLEAN DEFAULT true,
+      p_reset_budgets BOOLEAN DEFAULT true,
+      p_reset_goals BOOLEAN DEFAULT false,
+      p_reset_accounts_balance BOOLEAN DEFAULT true
+  ) RETURNS JSONB
+  ```
+  Menjalankan pembersihan massal data pengguna (*reset app data*) secara atomik (ACID) dengan validasi otorisasi `auth.uid() = p_user_id`. Mengembalikan statistik jumlah data yang berhasil dihapus.
 
 ---
 

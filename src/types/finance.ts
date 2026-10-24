@@ -7,6 +7,40 @@ export interface User {
   createdAt: string;
 }
 
+export interface UserProfile {
+  id: string;
+  userId: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  defaultCurrency: string;
+  phoneNumber?: string | null;
+  dateOfBirth?: string | null;
+  dateFormat: string;
+  timeZone: string;
+  language: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AppTheme = 'light' | 'dark' | 'system';
+
+export interface UserPreferences {
+  id: string;
+  userId: string;
+  theme: AppTheme;
+  defaultLandingPage: string;
+  itemsPerPage: number;
+  showAccountBalance: boolean;
+  showCategoryIcons: boolean;
+  compactMode: boolean;
+  emailNotifications: boolean;
+  budgetAlerts: boolean;
+  recurringReminders: boolean;
+  lowBalanceAlerts: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Category {
   id: string;
   name: string;

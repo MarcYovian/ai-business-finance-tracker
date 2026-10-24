@@ -2,60 +2,97 @@
 
 ## 1. Overview
 
-The Settings page is the control center for your AI Business Finance Tracker application. Here, you can configure the AI assistant, manage your transaction categories, and oversee your fund sources.
+Halaman Settings (`src/pages/Settings.tsx`) adalah pusat kontrol konfigurasi profil pengguna, preferensi aplikasi, regional/mata uang, pengaturan notifikasi, manajemen cadangan data, dan keamanan akun pada aplikasi **AI Business Finance Tracker**.
 
-The page is located at `src/pages/Settings.tsx` and is organized into three main tabs for ease of use.
+Desain antarmuka baru mengikuti arsitektur modular terpisah di direktori `src/components/settings/`, di mana kode antarmuka dipecah menjadi komponen *sections*, *widgets*, *dialogs*, dan *hooks* agar maintainability tetap tinggi dan kode tidak menumpuk dalam 1 file besar.
+
+Seluruh navigasi sub-menu tetap berjalan di bawah URL utama `/settings` dengan query parameter `?tab=` untuk menjaga state navigasi yang bersih dan mendukung bookmarking.
 
 ---
 
-## 2. AI Settings
+## 2. Struktur Direktori Komponen Modular
 
-This tab allows you to configure the connection to the artificial intelligence services that power the AI Assistant.
+```text
+src/components/settings/
+├── sections/                   # Komponen halaman sub-menu
+│   ├── ProfileSection.tsx       # 1. Profile
+│   ├── PreferencesSection.tsx   # 2. Preferences
+│   ├── CurrencyRegionSection.tsx# 3. Currency & Region
+│   ├── NotificationsSection.tsx # 4. Notifications
+│   ├── DataManagementSection.tsx# 5. Data Management
+│   └── SecuritySection.tsx      # 6. Security
+├── widgets/                    # Widget independen & reusable
+│   ├── ProfileInfoWidget.tsx    # Informasi foto, nama, email, phone, DOB
+│   ├── AppPreferencesWidget.tsx # Tema (Light/Dark/System), landing page, switches
+│   ├── CurrencyRegionWidget.tsx # Dropdown mata uang, format tanggal, timezone, bahasa
+│   ├── QuickActionsWidget.tsx   # Widget aksi cepat (Export, Import CSV, Reset Data)
+│   ├── AccountSecurityWidget.tsx# Widget status keamanan akun (Password, 2FA, Sessions)
+│   ├── NotificationPrefsWidget.tsx # Sakelar preferensi notifikasi
+│   ├── NotificationsHistoryWidget.tsx # Umpan riwayat aktivitas notifikasi dari DB
+│   └── DataStatsWidget.tsx      # Ringkasan statistik penyimpanan akun
+├── dialogs/                    # Dialog interaktif
+│   ├── ChangePasswordDialog.tsx # Modal ubah kata sandi
+│   ├── ImportCsvDialog.tsx      # Modal impor mutasi transaksi CSV
+│   └── ResetDataConfirmDialog.tsx # Modal konfirmasi pembersihan data aman
+├── hooks/                      # Custom hooks reaktif
+│   ├── useUserProfile.ts        # Query & Mutation user_profiles + upload avatar
+│   ├── useUserPreferences.ts    # Query & Mutation user_preferences
+│   ├── useDataManagement.ts     # Export backup, import CSV, reset RPC
+│   └── useAccountSecurity.ts    # Change password, MFA, active session
+├── types.ts                    # Antarmuka TypeScript
+├── constants.ts                # Opsi daftar mata uang, format tanggal, zona waktu
+└── index.ts                    # Barrel export
+```
 
--   **Provider Selection**: You can choose between two leading AI providers:
-    -   **OpenAI**
-    -   **Google Gemini**
+---
 
--   **API Key Management**: Based on your provider selection, you can enter the corresponding API key. The input for the non-selected provider is disabled to prevent confusion. API keys are stored securely in the browser's local storage.
+## 3. Rincian Sub-Halaman & Widget
 
--   **Saving**: Click the "Save Settings" button to apply your changes.
+### 3.1 Profile
+- **`ProfileInfoWidget`**:
+  - Foto avatar profil dengan tombol kamera untuk mengunggah foto baru ke Supabase Storage bucket `avatars`.
+  - Nama lengkap pengguna (`display_name`).
+  - Alamat email (terkoneksi langsung ke Supabase Auth).
+  - Nomor telepon dengan pemilih kode negara (default `+62`).
+  - Tanggal lahir dengan pemilih kalender interaktif.
+  - Tombol simpan perubahan (*Save changes*).
+- Menampilkan widget **Quick Actions** dan **Account Security** pada tampilan beranda.
 
-## 3. Categories Management
+### 3.2 Preferences
+- **`AppPreferencesWidget`**:
+  - **Theme**: Pilihan mode tampilan *Light*, *Dark*, dan *System* yang langsung disinkronkan ke root stylesheet.
+  - **Default landing page**: Halaman yang pertama kali dimuat setelah login (Dashboard, Accounts, Transactions, Budget, Categories).
+  - **Items per page**: Jumlah data per halaman tabel (10, 25, 50, 100 items).
+  - **Show account balance**: Sakelar untuk menampilkan/menyembunyikan nominal saldo.
+  - **Show category icons**: Sakelar untuk menampilkan ikon kategori pada daftar transaksi.
+  - **Compact mode**: Sakelar untuk tata letak tabel yang lebih rapat/kompak.
+- Dilengkapi kartu **Live Display Preview** untuk melihat simulasi konfigurasi secara real-time.
 
-Properly organizing your transactions is crucial for good financial analysis. This tab provides full control over your income and expense categories.
+### 3.3 Currency & Region
+- **`CurrencyRegionWidget`**:
+  - **Currency**: Pilihan mata uang default akun (IDR - Rupiah, USD, EUR, SGD, MYR).
+  - **Date format**: Format tampilan tanggal (`DD MMM YYYY`, `YYYY-MM-DD`, `DD/MM/YYYY`, `MM/DD/YYYY`).
+  - **Time zone**: Zona waktu lokal (`Asia/Jakarta`, `Asia/Makassar`, `Asia/Jayapura`, `Asia/Singapore`, `UTC`).
+  - **Language**: Bahasa antarmuka (`English`, `Bahasa Indonesia`).
+- Kartu **Regional Formatting** menyajikan pratinjau format angka dan tanggal saat ini.
 
-### a. Adding Categories
+### 3.4 Notifications
+- **`NotificationPrefsWidget`**:
+  - Sakelar notifikasi email (*Email Notifications*).
+  - Peringatan batas pagu anggaran (*Budget Limit Alerts* &gt; 80%).
+  - Pengingat tagihan transaksi berulang (*Recurring Bill Reminders*).
+  - Peringatan saldo akun menipis (*Low Balance Warnings*).
+- **`NotificationsHistoryWidget`**: Menampilkan 5 riwayat peringatan sistem terkini langsung dari tabel database `public.notifications`.
 
--   You can add a new **parent category** by providing a name and selecting a type (`Income` or `Expense`).
+### 3.5 Data Management
+- **`DataStatsWidget`**: Menampilkan metrik jumlah transaksi, akun rekening/dompet, kategori, dan rencana anggaran yang tersimpan.
+- **`QuickActionsWidget`**:
+  - **Export Data**: Mengunduh cadangan lengkap seluruh data akun dalam format JSON atau CSV.
+  - **Import Transactions**: Mengunggah file CSV mutasi transaksi dengan validasi header dan tanggal otomatis.
+  - **Reset App Data**: Dialog konfirmasi penghapusan data dengan kode verifikasi ketik `RESET` dan pemanggilan RPC PostgreSQL atomik `reset_user_financial_data`.
 
-### b. Managing Sub-categories
-
--   The application supports a hierarchical category structure. You can add a **sub-category** to any existing parent category.
--   To add a sub-category, click the "Sub" button on a parent category item. The type of the sub-category is automatically inherited from its parent.
-
-### c. Editing and Deleting
-
--   **Edit**: Any category or sub-category can be renamed by clicking the pencil icon.
--   **Delete**: Categories and sub-categories can be deleted by clicking the trash can icon. *Note: Deleting a parent category does not currently delete its sub-categories. This should be done manually.*
-
-### d. User Interface
-
--   Income and expense categories are listed in separate sections for clarity.
--   Parent categories can be expanded or collapsed to show or hide their sub-categories.
-
-## 4. Funds Management
-
-This tab is for managing your fund sources, which represent the different accounts or pools of money you use (e.g., bank accounts, cash wallets).
-
-### a. Adding a Fund Source
-
--   You can add a new fund source by providing a **name** (e.g., "Business Bank Account") and its current **initial balance**.
-
-### b. Deleting a Fund Source
-
--   Fund sources can be deleted by clicking the "Delete" button. Be cautious, as this action can affect transactions associated with the fund.
-
-### c. Transferring Funds
-
--   A key feature of this section is the ability to perform internal transfers. Clicking the **"Transfer Funds"** button opens the `TransferDialog`.
--   In this dialog, you can select a source fund, a destination fund, and the amount to transfer. You can also specify an optional administrative fee for the transfer.
+### 3.6 Security
+- **`AccountSecurityWidget`**:
+  - **Change Password**: Membuka dialog pembaruan kata sandi Supabase Auth.
+  - **Two-Factor Authentication (2FA)**: Memeriksa dan mengelola status proteksi MFA TOTP.
+  - **Active Sessions**: Memeriksa sesi browser aktif yang sedang terhubung.

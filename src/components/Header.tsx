@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useCategories } from '@/hooks/useCategories';
 import { useFundSources } from '@/hooks/useFundSources';
+import { useUserProfile } from '@/components/settings/hooks/useUserProfile';
 import { TransactionDialog } from '@/components/TransactionDialog';
 import { TransferDialog } from '@/components/TransferDialog';
 import {
@@ -148,23 +149,23 @@ export const Header: React.FC<HeaderProps> = ({ onMobileMenuClick }) => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // User display name & email (defaulting faithfully to the screenshot if not customized)
-  const userEmail = user?.email || 'marcellinus@example.com';
+  // User display name & avatar from database profile
+  const { profile } = useUserProfile(user?.id);
+  const userEmail = user?.email || '';
+  const emailPrefix = user?.email ? user.email.split('@')[0] : 'User';
   const userDisplayName =
-    user?.email && user.email !== 'marcellinus@example.com'
-      ? user.email.split('@')[0].charAt(0).toUpperCase() + user.email.split('@')[0].slice(1)
-      : 'Marcellinus Yovian';
+    profile?.displayName ||
+    (emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1));
   const userInitials =
     userDisplayName
       .split(' ')
+      .filter(Boolean)
       .map((n) => n[0])
       .join('')
       .slice(0, 2)
-      .toUpperCase() || 'MY';
+      .toUpperCase() || 'U';
 
-  // Avatar photo matching Marcellinus Yovian in the screenshot
-  const avatarUrl =
-    'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80';
+  const avatarUrl = profile?.avatarUrl || undefined;
 
   const handleLogout = async () => {
     try {
@@ -182,20 +183,20 @@ export const Header: React.FC<HeaderProps> = ({ onMobileMenuClick }) => {
 
   return (
     <>
-      <header className="h-16 px-4 sm:px-7 flex items-center justify-between border-b border-[#E7EBE4] bg-[#F5F6F3] shrink-0 sticky top-0 z-20 transition-all">
+      <header className="h-16 px-3 sm:px-5 md:px-7 flex items-center justify-between border-b border-[#E7EBE4] bg-[#F5F6F3] shrink-0 sticky top-0 z-20 transition-all">
         {/* Left Side: Search Bar + Mobile Menu Button */}
-        <div className="flex items-center gap-2.5 sm:gap-3 flex-1 max-w-xl">
+        <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0 max-w-xl mr-2 sm:mr-3">
           {/* Mobile hamburger button */}
           {onMobileMenuClick && (
             <button
               type="button"
               onClick={onMobileMenuClick}
-              className="md:hidden w-10 h-10 rounded-2xl bg-white border border-[#E2E6DF] flex items-center justify-center text-[#172019] shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:bg-[#F9FAF8] transition-colors shrink-0"
+              className="md:hidden w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-white border border-[#E2E6DF] flex items-center justify-center text-[#172019] shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:bg-[#F9FAF8] transition-colors shrink-0"
               aria-label="Buka Menu"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5"
+                className="h-4.5 w-4.5 sm:h-5 sm:w-5"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -213,38 +214,40 @@ export const Header: React.FC<HeaderProps> = ({ onMobileMenuClick }) => {
           {/* Search Trigger Bar matching the design in screenshot */}
           <div
             onClick={() => setIsSearchOpen(true)}
-            className="group relative flex items-center w-full max-w-md h-10 sm:h-11 px-3.5 sm:px-4 rounded-2xl bg-white border border-[#E2E6DF] shadow-[0_1px_2px_rgba(0,0,0,0.02)] cursor-pointer hover:border-[#CAD2C5] hover:shadow-sm transition-all select-none"
+            className="group relative flex items-center flex-1 min-w-0 max-w-md h-9 sm:h-10 md:h-11 px-2.5 sm:px-3.5 md:px-4 rounded-xl sm:rounded-2xl bg-white border border-[#E2E6DF] shadow-[0_1px_2px_rgba(0,0,0,0.02)] cursor-pointer hover:border-[#CAD2C5] hover:shadow-sm transition-all select-none"
           >
-            <Search className="h-4 w-4 text-[#9AA59C] group-hover:text-[#6D776F] transition-colors shrink-0 mr-3" />
-            <span className="text-[13px] text-[#9AA59C] font-normal truncate flex-1">
-              Search transactions, categories, or anything...
+            <Search className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-[#9AA59C] group-hover:text-[#6D776F] transition-colors shrink-0 mr-2 sm:mr-3" />
+            <span className="text-[12px] sm:text-[13px] text-[#9AA59C] font-normal truncate flex-1">
+              <span className="hidden xl:inline">Search transactions, categories, or anything...</span>
+              <span className="hidden sm:inline xl:hidden">Search transactions, categories...</span>
+              <span className="sm:hidden">Search...</span>
             </span>
-            <kbd className="hidden lg:inline-flex items-center gap-0.5 px-2 py-0.5 text-[10.5px] font-mono text-[#8B968D] bg-[#F5F6F3] border border-[#E2E6DF] rounded-md shrink-0">
+            <kbd className="hidden lg:inline-flex items-center gap-0.5 px-2 py-0.5 text-[10px] sm:text-[10.5px] font-mono text-[#8B968D] bg-[#F5F6F3] border border-[#E2E6DF] rounded-md shrink-0 ml-1.5">
               <span className="text-xs">⌘</span>K
             </kbd>
           </div>
         </div>
 
         {/* Right Side: Notification Bell + Settings Gear + User Profile Pill */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 md:gap-3 shrink-0">
           {/* 1. Notification Bell Popover */}
           <Popover>
             <PopoverTrigger asChild>
               <button
                 type="button"
-                className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-white border border-[#E2E6DF] shadow-[0_1px_2px_rgba(0,0,0,0.02)] flex items-center justify-center text-[#556057] hover:text-[#172019] hover:bg-[#F9FAF8] transition-all relative shrink-0"
+                className="w-9 h-9 sm:w-10 sm:h-10 md:w-11 md:h-11 rounded-xl sm:rounded-2xl bg-white border border-[#E2E6DF] shadow-[0_1px_2px_rgba(0,0,0,0.02)] flex items-center justify-center text-[#556057] hover:text-[#172019] hover:bg-[#F9FAF8] transition-all relative shrink-0"
                 title="Notifikasi"
               >
                 <Bell className="h-4 w-4" />
                 {unreadCount > 0 && (
-                  <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-[#EF4444] rounded-full ring-2 ring-white animate-pulse" />
+                  <span className="absolute top-2 right-2 sm:top-2.5 sm:right-2.5 w-2 h-2 bg-[#EF4444] rounded-full ring-2 ring-white animate-pulse" />
                 )}
               </button>
             </PopoverTrigger>
             <PopoverContent
               align="end"
               sideOffset={8}
-              className="w-80 sm:w-96 p-0 rounded-2xl bg-white border border-[#E2E6DF] shadow-xl overflow-hidden"
+              className="w-[calc(100vw-1.5rem)] sm:w-96 max-w-sm p-0 rounded-2xl bg-white border border-[#E2E6DF] shadow-xl overflow-hidden"
             >
               <div className="p-3.5 border-b border-[#EDF1EB] flex items-center justify-between bg-[#FAFBF9]">
                 <div className="flex items-center gap-2">
@@ -331,7 +334,7 @@ export const Header: React.FC<HeaderProps> = ({ onMobileMenuClick }) => {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-white border border-[#E2E6DF] shadow-[0_1px_2px_rgba(0,0,0,0.02)] flex items-center justify-center text-[#556057] hover:text-[#172019] hover:bg-[#F9FAF8] transition-all shrink-0"
+                className="w-9 h-9 sm:w-10 sm:h-10 md:w-11 md:h-11 rounded-xl sm:rounded-2xl bg-white border border-[#E2E6DF] shadow-[0_1px_2px_rgba(0,0,0,0.02)] flex items-center justify-center text-[#556057] hover:text-[#172019] hover:bg-[#F9FAF8] transition-all shrink-0"
                 title="Pengaturan"
               >
                 <Settings className="h-4 w-4" />
@@ -340,7 +343,7 @@ export const Header: React.FC<HeaderProps> = ({ onMobileMenuClick }) => {
             <DropdownMenuContent
               align="end"
               sideOffset={8}
-              className="w-56 p-1.5 rounded-2xl bg-white border border-[#E2E6DF] shadow-xl"
+              className="w-56 max-w-[calc(100vw-1.5rem)] p-1.5 rounded-2xl bg-white border border-[#E2E6DF] shadow-xl"
             >
               <DropdownMenuLabel className="px-2.5 py-1.5 text-[11px] font-bold text-[#869288] uppercase tracking-wider">
                 Pengaturan Cepat
@@ -380,31 +383,33 @@ export const Header: React.FC<HeaderProps> = ({ onMobileMenuClick }) => {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <div
-                className="h-10 sm:h-11 px-2 sm:px-3 rounded-2xl bg-white border border-[#E2E6DF] shadow-[0_1px_2px_rgba(0,0,0,0.02)] flex items-center gap-2.5 cursor-pointer hover:bg-[#F9FAF8] hover:border-[#CAD2C5] transition-all select-none shrink-0"
+                className="h-9 sm:h-10 md:h-11 px-1.5 sm:px-2 md:px-3 rounded-xl sm:rounded-2xl bg-white border border-[#E2E6DF] shadow-[0_1px_2px_rgba(0,0,0,0.02)] flex items-center gap-1.5 sm:gap-2 md:gap-2.5 cursor-pointer hover:bg-[#F9FAF8] hover:border-[#CAD2C5] transition-all select-none shrink-0"
               >
-                <Avatar className="w-7 h-7 sm:w-8 sm:h-8 rounded-full ring-1 ring-black/5 overflow-hidden shrink-0">
+                <Avatar className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 rounded-full ring-1 ring-black/5 overflow-hidden shrink-0">
                   <AvatarImage src={avatarUrl} alt={userDisplayName} className="object-cover" />
-                  <AvatarFallback className="bg-[#E2ED7C] text-[#233319] text-[11px] font-bold">
+                  <AvatarFallback className="bg-[#E2ED7C] text-[#233319] text-[10px] sm:text-[11px] font-bold">
                     {userInitials}
                   </AvatarFallback>
                 </Avatar>
 
-                <div className="hidden sm:flex flex-col text-left">
-                  <span className="text-[12.5px] font-semibold text-[#172019] leading-tight truncate max-w-[130px]">
+                {/* Display name: Show on tablet (md:) and desktop */}
+                <div className="hidden md:flex flex-col text-left">
+                  <span className="text-[12px] sm:text-[12.5px] font-semibold text-[#172019] leading-tight truncate max-w-[90px] lg:max-w-[120px] xl:max-w-[150px]">
                     {userDisplayName}
                   </span>
-                  <span className="text-[10px] text-[#869288] leading-tight truncate max-w-[130px]">
+                  {/* Email: Only show on large desktop (lg:) where there's ample room */}
+                  <span className="hidden lg:inline text-[9.5px] sm:text-[10px] text-[#869288] leading-tight truncate max-w-[120px] xl:max-w-[150px]">
                     {userEmail}
                   </span>
                 </div>
 
-                <ChevronDown className="h-3.5 w-3.5 text-[#869288] shrink-0 sm:ml-0.5" />
+                <ChevronDown className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-[#869288] shrink-0" />
               </div>
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
               sideOffset={8}
-              className="w-64 p-1.5 rounded-2xl bg-white border border-[#E2E6DF] shadow-xl"
+              className="w-64 max-w-[calc(100vw-1.5rem)] p-1.5 rounded-2xl bg-white border border-[#E2E6DF] shadow-xl"
             >
               {/* Profile Card Summary Header */}
               <div className="px-3 py-2.5 mb-1 bg-[#FAFBF9] rounded-xl border border-[#EDF1EB] flex items-center gap-3">
@@ -619,16 +624,16 @@ export const Header: React.FC<HeaderProps> = ({ onMobileMenuClick }) => {
                           : 'bg-blue-500'
                       }`}
                     />
-                    <div className="flex flex-col min-w-0">
+                    <div className="flex flex-col min-w-0 flex-1 mr-2">
                       <span className="font-medium text-[#172019] truncate">
                         {tx.description || 'Transaksi Tanpa Nama'}
                       </span>
-                      <span className="text-[10.5px] text-[#869288]">
+                      <span className="text-[10px] sm:text-[10.5px] text-[#869288]">
                         {format(new Date(tx.transactionDate), 'dd MMM yyyy')}
                       </span>
                     </div>
                     <span
-                      className={`ml-auto font-mono text-[12px] font-semibold ${
+                      className={`ml-auto shrink-0 font-mono text-[11.5px] sm:text-[12px] font-semibold ${
                         tx.type === 'income'
                           ? 'text-emerald-600'
                           : tx.type === 'expense'

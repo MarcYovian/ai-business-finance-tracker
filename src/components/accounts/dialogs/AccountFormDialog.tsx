@@ -204,7 +204,7 @@ export const AccountFormDialog: React.FC<AccountFormDialogProps> = ({
             </Label>
             <Input
               id="holder-name"
-              placeholder="e.g. Marcellinus Yovian"
+              placeholder="e.g. Alex Johnson"
               value={accountHolderName}
               onChange={(e) => setAccountHolderName(e.target.value)}
               className="rounded-xl border-[#EDF1EB] text-sm"
