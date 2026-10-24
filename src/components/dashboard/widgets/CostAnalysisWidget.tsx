@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
-import { formatRupiah } from '@/lib/currency';
+import { formatCurrency } from '@/lib/currency';
 import { Category, Transaction } from '@/types/finance';
 import { CATEGORY_COLORS } from '../constants';
 import { CategoryBreakdownItem } from '../types';
@@ -124,7 +124,7 @@ export function CostAnalysisWidget({
 
         <div className="mt-2.5">
           <span className="text-[20px] font-extrabold text-[#161F18] font-sans">
-            {formatRupiah(totalExpenses)}
+            {formatCurrency(totalExpenses)}
           </span>
         </div>
 
@@ -142,7 +142,7 @@ export function CostAnalysisWidget({
                   className={`h-full ${idx === 0 ? 'rounded-l-full' : ''} ${
                     idx === categoryAnalysis.length - 1 ? 'rounded-r-full' : ''
                   }`}
-                  title={`${cat.name}: ${cat.percentage}% (${formatRupiah(cat.amount)})`}
+                  title={`${cat.name}: ${cat.percentage}% (${formatCurrency(cat.amount)})`}
                 />
               ))}
             </div>
@@ -165,7 +165,7 @@ export function CostAnalysisWidget({
                     </span>
                   </span>
                   <span className="font-bold text-[#18211A] shrink-0 font-numeric">
-                    {cat.percentage}% ({formatRupiah(cat.amount)})
+                    {cat.percentage}% ({formatCurrency(cat.amount)})
                   </span>
                 </div>
               ))}

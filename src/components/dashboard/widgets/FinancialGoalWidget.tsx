@@ -45,6 +45,9 @@ export function FinancialGoalWidget({
     : 0;
   const currentGoal = activeGoals[safeIndex] || null;
 
+  // Convert live fund balance from cents to whole Rupiah to align with FinancialGoal units
+  const liveCashInRupiah = Math.round(totalFundBalance / 100);
+
   // Calculate current amount and progress
   const { currentProgress, progressPercentage, remaining } = useMemo(() => {
     if (!currentGoal) {
@@ -54,7 +57,7 @@ export function FinancialGoalWidget({
     // For savings/dana cadangan, automatically track against total liquid business cash balance
     const current =
       currentGoal.category === 'savings'
-        ? Math.max(totalFundBalance, currentGoal.current_amount || 0)
+        ? Math.max(liveCashInRupiah, currentGoal.current_amount || 0)
         : currentGoal.current_amount || 0;
 
     const target = currentGoal.target_amount > 0 ? currentGoal.target_amount : 1;
@@ -66,7 +69,7 @@ export function FinancialGoalWidget({
       progressPercentage: pct,
       remaining: rem,
     };
-  }, [currentGoal, totalFundBalance]);
+  }, [currentGoal, liveCashInRupiah]);
 
   const handlePrevGoal = () => {
     setActiveGoalIndex((prev) => (prev > 0 ? prev - 1 : activeGoals.length - 1));
@@ -297,7 +300,7 @@ export function FinancialGoalWidget({
         onOpenChange={setIsDialogOpen}
         userId={effectiveUserId}
         goalToEdit={editingGoal}
-        totalFundBalance={totalFundBalance}
+        totalFundBalance={liveCashInRupiah}
       />
     </>
   );

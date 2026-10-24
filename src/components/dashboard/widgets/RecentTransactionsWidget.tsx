@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowUpRight, Wallet, Receipt } from 'lucide-react';
-import { formatRupiah, formatDate } from '@/lib/currency';
+import { formatCurrency, formatDate } from '@/lib/currency';
 import { Transaction } from '@/types/finance';
 
 interface RecentTransactionsWidgetProps {
@@ -81,7 +81,7 @@ export function RecentTransactionsWidget({
                     }`}
                   >
                     {isIncome ? '+ ' : '- '}
-                    {formatRupiah(tx.amount)}
+                    {formatCurrency(tx.amount)}
                   </span>
                   <span className="text-[9.5px] text-[#869288] block">
                     Selesai

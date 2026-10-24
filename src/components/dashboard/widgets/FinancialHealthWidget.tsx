@@ -10,7 +10,7 @@ import {
   ChevronRight,
   Sparkles,
 } from 'lucide-react';
-import { formatRupiah } from '@/lib/currency';
+import { formatCurrency } from '@/lib/currency';
 import { Transaction } from '@/types/finance';
 
 interface FinancialHealthWidgetProps {
@@ -192,7 +192,7 @@ export function FinancialHealthWidget({
           </div>
 
           <div className="text-[20px] font-extrabold text-[#161F18] font-sans tracking-tight leading-tight mt-0.5 truncate">
-            {formatRupiah(totalFundBalance)}
+            {formatCurrency(totalFundBalance)}
           </div>
 
           {/* Growth Pill */}

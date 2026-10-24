@@ -13,7 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { formatRupiah, formatDate } from '@/lib/currency';
+import { formatCurrency, formatDate } from '@/lib/currency';
 import { Transaction } from '@/types/finance';
 import { PeriodType } from '../types';
 import { PERIOD_LABELS } from '../constants';
@@ -122,7 +122,7 @@ export function CashflowChartWidget({
         <div>
           <div className="flex items-baseline gap-2">
             <span className="text-[26px] sm:text-[28px] font-extrabold tracking-tight text-[#161F18] font-sans">
-              {formatRupiah(totalFundBalance)}
+              {formatCurrency(totalFundBalance)}
             </span>
             <span className="text-[12px] text-[#838E85] font-normal">
               (Total Saldo Aktif)
@@ -288,7 +288,7 @@ export function CashflowChartWidget({
                       Tabungan
                     </span>
                     <span className="font-semibold text-[#18211A] font-numeric">
-                      +{formatRupiah(activeTooltipDay.savings)}
+                      +{formatCurrency(activeTooltipDay.savings)}
                     </span>
                   </div>
 
@@ -298,7 +298,7 @@ export function CashflowChartWidget({
                       Pemasukan
                     </span>
                     <span className="font-semibold text-[#18211A] font-numeric">
-                      +{formatRupiah(activeTooltipDay.income)}
+                      +{formatCurrency(activeTooltipDay.income)}
                     </span>
                   </div>
 
@@ -308,7 +308,7 @@ export function CashflowChartWidget({
                       Pengeluaran
                     </span>
                     <span className="font-semibold text-[#18211A] font-numeric">
-                      -{formatRupiah(activeTooltipDay.expense)}
+                      -{formatCurrency(activeTooltipDay.expense)}
                     </span>
                   </div>
                 </div>
@@ -551,7 +551,7 @@ export function CashflowChartWidget({
               Total Pemasukan
             </span>
             <span className="text-[19px] sm:text-[20px] font-bold text-[#161F18] font-sans block">
-              {formatRupiah(periodSummary.income)}
+              {formatCurrency(periodSummary.income)}
             </span>
             <span className="text-[10px] text-[#869288] font-medium flex items-center gap-0.5 mt-0.5">
               {selectedPeriod === 'custom' && activeCustomRange
@@ -565,7 +565,7 @@ export function CashflowChartWidget({
               Total Pengeluaran
             </span>
             <span className="text-[19px] sm:text-[20px] font-bold text-[#161F18] font-sans block">
-              {formatRupiah(periodSummary.expense)}
+              {formatCurrency(periodSummary.expense)}
             </span>
             <span className="text-[10px] text-[#869288] font-medium flex items-center gap-0.5 mt-0.5">
               {selectedPeriod === 'custom' && activeCustomRange
@@ -579,7 +579,7 @@ export function CashflowChartWidget({
               Saldo Tersimpan
             </span>
             <span className="text-[19px] sm:text-[20px] font-bold text-[#161F18] font-sans block">
-              {formatRupiah(periodSummary.savings)}
+              {formatCurrency(periodSummary.savings)}
             </span>
             <span className="text-[10px] text-[#4A7C1E] font-medium flex items-center gap-0.5 mt-0.5">
               <ArrowUpRight className="h-3 w-3" /> Pemasukan - Pengeluaran

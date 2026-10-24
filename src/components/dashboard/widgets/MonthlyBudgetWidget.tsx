@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Edit2 } from 'lucide-react';
-import { formatRupiah } from '@/lib/currency';
+import { formatCurrency } from '@/lib/currency';
 import { Transaction } from '@/types/finance';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMonthlyBudgetLimit } from '@/hooks/useBudget';
@@ -28,7 +28,7 @@ export function MonthlyBudgetWidget({
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth();
 
-  // Pengeluaran khusus untuk bulan berjalan
+  // Pengeluaran khusus untuk bulan berjalan (in cents)
   const monthlyExpenses = useMemo(() => {
     return transactions
       .filter((t) => {
@@ -102,7 +102,7 @@ export function MonthlyBudgetWidget({
               isOverBudget ? 'text-[#E0533C]' : 'text-[#172019]'
             } font-numeric`}
           >
-            {formatRupiah(monthlyExpenses)}{' '}
+            {formatCurrency(monthlyExpenses)}{' '}
             {effectiveLimit > 0
               ? isOverBudget
                 ? '(Melebihi Plafon)'
@@ -111,7 +111,7 @@ export function MonthlyBudgetWidget({
           </span>
           <span className="text-[#88938A] font-numeric">
             {effectiveLimit > 0
-              ? `Plafon: ${formatRupiah(effectiveLimit)}`
+              ? `Plafon: ${formatCurrency(effectiveLimit)}`
               : 'Plafon: Belum Diatur (Rp 0)'}
           </span>
         </div>

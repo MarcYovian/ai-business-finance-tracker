@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Wallet, Coins } from 'lucide-react';
-import { formatRupiah } from '@/lib/currency';
+import { formatCurrency } from '@/lib/currency';
 import { FundSource } from '@/types/finance';
 import { CARD_THEMES } from '../constants';
 import { QuickActionsWidget } from './QuickActionsWidget';
@@ -120,7 +120,7 @@ export function FundSourceCardSlider({
                     </div>
                   )}
                   <span className="font-extrabold text-[17px] font-sans tracking-tight">
-                    {formatRupiah(currentCard.balance)}
+                    {formatCurrency(currentCard.balance)}
                   </span>
                 </div>
 

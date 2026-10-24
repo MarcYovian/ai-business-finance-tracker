@@ -16,7 +16,7 @@ const useUser = () => {
 // ========== FETCH HOOKS ==========
 
 export interface MonthlyBudgetInfo {
-  limit: number; // in whole Rupiah
+  limit: number; // in cents
   source: "current" | "previous" | "none";
   budgetName?: string;
   sourceMonth?: string;
@@ -50,61 +50,75 @@ export const useMonthlyBudgetLimit = (userId?: string) => {
     const currentMonthNum = now.getMonth() + 1; // 1-12
     const currentMonthPrefix = `${currentYear}-${String(currentMonthNum).padStart(2, "0")}`;
 
-    const calculateBudgetLimitInRupiah = (b: any): number => {
-      let limitInCents = 0;
+    // Filter only active budgets
+    const activeBudgets = query.data.filter((b: any) => b.is_active !== false);
+
+    const getBudgetLimitInCents = (b: any): number => {
+      let sumItems = 0;
       if (b.budget_items && Array.isArray(b.budget_items) && b.budget_items.length > 0) {
-        const sumItems = b.budget_items.reduce(
+        sumItems = b.budget_items.reduce(
           (sum: number, item: { planned_amount?: number }) => sum + (item.planned_amount || 0),
           0
         );
-        if (sumItems > 0) {
-          limitInCents = sumItems;
-        }
       }
-      if (limitInCents === 0 && b.total_limit && b.total_limit > 1) {
-        limitInCents = b.total_limit;
+      let total = sumItems > 0 ? sumItems : (b.total_limit || 0);
+      // If legacy data was stored in whole Rupiah (e.g. 2.000.000 instead of 200.000.000 cents):
+      if (total > 0 && total < 10000000) {
+        total = total * 100;
       }
-      return Math.round(limitInCents / 100);
+      return total;
     };
 
-    // 1. Cek budget bulan berjalan
-    const currentBudget = query.data.find((b: any) => {
-      if (!b.start_date) return false;
-      return b.start_date.startsWith(currentMonthPrefix);
-    });
+    // Group active budgets by month
+    const budgetsByMonth = new Map<
+      string,
+      { totalCents: number; budgetName: string; startDate: string }
+    >();
 
-    if (currentBudget) {
-      const currentLimit = calculateBudgetLimitInRupiah(currentBudget);
-      if (currentLimit > 0) {
-        return {
-          limit: currentLimit,
-          source: "current",
-          budgetName: currentBudget.name,
-          isLoading: false,
-        };
+    for (const b of activeBudgets) {
+      if (!b.start_date) continue;
+      const monthKey = b.start_date.substring(0, 7);
+      const limitCents = getBudgetLimitInCents(b);
+      if (!budgetsByMonth.has(monthKey)) {
+        budgetsByMonth.set(monthKey, {
+          totalCents: limitCents,
+          budgetName: b.name,
+          startDate: b.start_date,
+        });
+      } else {
+        const existing = budgetsByMonth.get(monthKey)!;
+        existing.totalCents += limitCents;
       }
     }
 
-    // 2. Jika budget bulan berjalan belum ada atau masih 0, cari bulan-bulan sebelumnya
-    const previousBudgets = query.data
-      .filter((b: any) => {
-        if (!b.start_date) return false;
-        return b.start_date < `${currentMonthPrefix}-01`;
-      })
-      .sort((a: any, b: any) => b.start_date.localeCompare(a.start_date));
+    // 1. Cek budget bulan berjalan
+    const currentBudget = budgetsByMonth.get(currentMonthPrefix);
+    if (currentBudget && currentBudget.totalCents > 0) {
+      return {
+        limit: currentBudget.totalCents,
+        source: "current",
+        budgetName: currentBudget.budgetName,
+        isLoading: false,
+      };
+    }
 
-    for (const prev of previousBudgets) {
-      const prevLimit = calculateBudgetLimitInRupiah(prev);
-      if (prevLimit > 0) {
-        const d = new Date(prev.start_date);
+    // 2. Jika budget bulan berjalan belum ada atau masih 0, cari bulan-bulan sebelumnya
+    const pastMonths = Array.from(budgetsByMonth.keys())
+      .filter((monthKey) => monthKey < currentMonthPrefix)
+      .sort((a, b) => b.localeCompare(a));
+
+    for (const prevMonthKey of pastMonths) {
+      const prev = budgetsByMonth.get(prevMonthKey);
+      if (prev && prev.totalCents > 0) {
+        const d = new Date(prev.startDate);
         const sourceMonth = !isNaN(d.getTime())
           ? d.toLocaleDateString("id-ID", { month: "long", year: "numeric" })
           : undefined;
 
         return {
-          limit: prevLimit,
+          limit: prev.totalCents,
           source: "previous",
-          budgetName: prev.name,
+          budgetName: prev.budgetName,
           sourceMonth,
           isLoading: false,
         };
@@ -143,6 +157,29 @@ export const useCurrentBudget = (month: Date) => {
   return useQuery<Budget | null, Error>({
     queryKey: ["currentBudget", user.id, startDate],
     queryFn: () => budgetStorage.getOrCreateForMonth(user.id, month),
+  });
+};
+
+export interface PreviousBudgetResult {
+  budgetId: string;
+  name: string;
+  startDate: string;
+  monthLabel: string;
+  items: { category_id: string; amount: number }[];
+}
+
+export const usePreviousBudget = (month: Date) => {
+  const { user } = useAuth();
+  const userId = user?.id || "";
+  const yearMonth = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, "0")}`;
+
+  return useQuery<PreviousBudgetResult | null>({
+    queryKey: ["previousBudget", userId, yearMonth],
+    queryFn: () =>
+      userId
+        ? budgetStorage.getPreviousBudgetWithItems(userId, month)
+        : Promise.resolve(null),
+    enabled: !!userId,
   });
 };
 
