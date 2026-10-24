@@ -15,9 +15,12 @@ import {
 } from "react-router-dom";
 import { FEATURES } from "@/config/features";
 
+const Accounts = lazy(() => import("./pages/Accounts"));
 const AIAssistant = lazy(() => import("./pages/AIAssistant"));
 const Auth = lazy(() => import("./pages/Auth"));
 const BudgetPage = lazy(() => import("./pages/Budget"));
+const BudgetHistory = lazy(() => import("./pages/BudgetHistory"));
+const Categories = lazy(() => import("./pages/Categories"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Index = lazy(() => import("./pages/Index"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -85,6 +88,14 @@ const App = () => (
                 }
               />
               <Route
+                path="/accounts"
+                element={
+                  <ProtectedRoute>
+                    <Accounts />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/transactions"
                 element={
                   <ProtectedRoute>
@@ -97,6 +108,30 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <BudgetPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/budget/monthly"
+                element={
+                  <ProtectedRoute>
+                    <BudgetPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/budget/history"
+                element={
+                  <ProtectedRoute>
+                    <BudgetHistory />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/categories"
+                element={
+                  <ProtectedRoute>
+                    <Categories />
                   </ProtectedRoute>
                 }
               />

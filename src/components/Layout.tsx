@@ -6,6 +6,7 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import {
   Menu,
   LayoutDashboard,
+  WalletCards,
   Receipt,
   PieChart,
   Bot,
@@ -15,6 +16,9 @@ import {
   Search,
   Plus,
   Zap,
+  Tags,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { FEATURES } from '@/config/features';
@@ -23,18 +27,34 @@ interface LayoutProps {
   children: ReactNode;
 }
 
+interface SubNavItem {
+  path: string;
+  label: string;
+}
+
 interface NavItem {
   path: string;
   label: string;
   icon: typeof LayoutDashboard;
+  children?: SubNavItem[];
 }
 
 const baseNavItems: NavItem[] = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/transactions', label: 'Transaksi', icon: Receipt },
-  { path: '/budget', label: 'Anggaran', icon: PieChart },
+  { path: '/accounts', label: 'Accounts', icon: WalletCards },
+  { path: '/transactions', label: 'Transactions', icon: Receipt },
+  {
+    path: '/budget',
+    label: 'Budget',
+    icon: PieChart,
+    children: [
+      { path: '/budget', label: 'Monthly Budget' },
+      { path: '/budget/history', label: 'Budget History' },
+    ],
+  },
+  { path: '/categories', label: 'Categories', icon: Tags },
   { path: '/ai-assistant', label: 'AI Assistant', icon: Bot },
-  { path: '/settings', label: 'Pengaturan', icon: Settings },
+  { path: '/settings', label: 'Settings', icon: Settings },
 ];
 
 const navItems = baseNavItems.filter((item) => {
@@ -47,6 +67,9 @@ const navItems = baseNavItems.filter((item) => {
 const SidebarNav = ({ onLinkClick }: { onLinkClick?: () => void }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [budgetOpen, setBudgetOpen] = useState(() =>
+    location.pathname.startsWith('/budget')
+  );
 
   const handleNavigate = (path: string) => {
     navigate(path);
@@ -57,22 +80,83 @@ const SidebarNav = ({ onLinkClick }: { onLinkClick?: () => void }) => {
     <nav className="space-y-1">
       {navItems.map((item) => {
         const Icon = item.icon;
+        const hasChildren = item.children && item.children.length > 0;
+        const isParentActive = location.pathname.startsWith(item.path);
+
+        if (hasChildren) {
+          return (
+            <div key={item.path} className="space-y-1">
+              <button
+                type="button"
+                onClick={() => setBudgetOpen((prev) => !prev)}
+                className={`w-full relative flex items-center justify-between px-3 py-2 rounded-xl text-[13px] transition-colors text-left ${
+                  isParentActive && !budgetOpen
+                    ? 'bg-[#EDF8E8] text-[#2C6E20] font-semibold border border-[#D2ECD0]'
+                    : 'text-[#6D776F] hover:text-[#172019] hover:bg-[#F6F7F5] font-medium border border-transparent'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Icon className="h-[18px] w-[18px] shrink-0 text-[#6D776F]" />
+                  <span>{item.label}</span>
+                </div>
+                <span className="text-[#9AA59C]">
+                  {budgetOpen ? (
+                    <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4" />
+                  )}
+                </span>
+              </button>
+
+              {budgetOpen && (
+                <div className="pl-4 space-y-1 pt-0.5">
+                  {item.children!.map((child) => {
+                    const isChildActive =
+                      child.path === '/budget'
+                        ? location.pathname === '/budget' || location.pathname === '/budget/monthly'
+                        : location.pathname === child.path;
+
+                    return (
+                      <button
+                        key={child.path}
+                        type="button"
+                        onClick={() => handleNavigate(child.path)}
+                        className={`w-full relative flex items-center gap-2 px-3 py-1.5 rounded-xl text-[12.5px] transition-colors text-left ${
+                          isChildActive
+                            ? 'bg-[#EDF8E8] text-[#2C6E20] font-semibold border border-[#D2ECD0]'
+                            : 'text-[#6D776F] hover:text-[#172019] hover:bg-[#F6F7F5] font-medium border border-transparent'
+                        }`}
+                      >
+                        {isChildActive && (
+                          <span className="absolute left-0 top-1.5 bottom-1.5 w-1 bg-[#529E42] rounded-r-md" />
+                        )}
+                        <span>{child.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        }
+
         const isActive = location.pathname === item.path;
 
         return (
           <button
             key={item.path}
+            type="button"
             onClick={() => handleNavigate(item.path)}
             className={`w-full relative flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] transition-colors text-left ${
               isActive
-                ? 'bg-[#F0F2EE] text-[#172019] font-semibold'
-                : 'text-[#6D776F] hover:text-[#172019] hover:bg-[#F6F7F5] font-medium'
+                ? 'bg-[#EDF8E8] text-[#2C6E20] font-semibold border border-[#D2ECD0]'
+                : 'text-[#6D776F] hover:text-[#172019] hover:bg-[#F6F7F5] font-medium border border-transparent'
             }`}
           >
             {isActive && (
-              <span className="absolute left-0 top-2 bottom-2 w-1 bg-[#172019] rounded-r-md" />
+              <span className="absolute left-0 top-2 bottom-2 w-1 bg-[#529E42] rounded-r-md" />
             )}
-            <Icon className={`h-[18px] w-[18px] shrink-0 ${isActive ? 'text-[#172019]' : 'text-[#6D776F]'}`} />
+            <Icon className={`h-[18px] w-[18px] shrink-0 ${isActive ? 'text-[#529E42]' : 'text-[#6D776F]'}`} />
             <span>{item.label}</span>
           </button>
         );

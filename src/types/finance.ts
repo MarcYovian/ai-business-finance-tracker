@@ -14,6 +14,11 @@ export interface Category {
   createdAt: string;
   type: "income" | "expense";
   parentId?: string | null;
+  color?: string | null;
+  icon?: string | null;
+  description?: string | null;
+  sort_order?: number | null;
+  is_active?: boolean;
 }
 
 export interface FundSource {
@@ -56,6 +61,8 @@ export interface BudgetDetail {
   spent: number; // in cents
 }
 
+export type TransactionStatus = 'completed' | 'pending' | 'failed';
+
 export interface Transaction {
   id: string;
   description: string;
@@ -68,6 +75,8 @@ export interface Transaction {
   sourceFundId?: string;
   destinationFundId?: string;
   fee?: number;
+  notes?: string | null;
+  status?: TransactionStatus;
   parentTransactionId?: string;
 }
 

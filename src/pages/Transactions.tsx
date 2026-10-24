@@ -1,243 +1,135 @@
-import { DeleteConfirmationDialog } from "@/components/DeleteConfirmationDialog";
-import { Layout } from "@/components/Layout";
-import { TransactionDialog } from "@/components/TransactionDialog";
-import { TransactionIcon } from "@/components/TransactionIcon";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import React, { useState, useMemo } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { Layout } from '@/components/Layout';
+import { useTransactions, useDeleteTransaction } from '@/hooks/useTransactions';
+import { useCategories } from '@/hooks/useCategories';
+import { useFundSources } from '@/hooks/useFundSources';
+import { Button } from '@/components/ui/button';
+import { toast } from '@/hooks/use-toast';
+import { TransactionDialog } from '@/components/TransactionDialog';
+import { DeleteConfirmationDialog } from '@/components/DeleteConfirmationDialog';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { useAuth } from "@/contexts/AuthContext";
-import { toast } from "@/hooks/use-toast";
-import { useCategories } from "@/hooks/useCategories";
-import { useFundSources } from "@/hooks/useFundSources";
-import { useDeleteTransaction, useTransactions } from "@/hooks/useTransactions";
-import { formatCurrency, formatDate } from "@/lib/currency";
-import { cn } from "@/lib/utils";
-import { Transaction } from "@/types/finance";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Plus, Upload, Download, FileSpreadsheet, ChevronDown, SlidersHorizontal } from 'lucide-react';
+import { Transaction } from '@/types/finance';
 import {
-  AlertCircle,
-  Calendar,
-  Pencil,
-  Plus,
-  Trash2,
-  TrendingDown,
-  TrendingUp,
-} from "lucide-react";
-import { useMemo, useState } from "react";
-
-const TransactionLoading = () => (
-  <Layout>
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-4 w-64 mt-2" />
-        </div>
-        <Skeleton className="h-10 w-36" />
-      </div>
-      <Card>
-        <CardHeader>
-          <div className="flex justify-between items-center">
-            <Skeleton className="h-6 w-40" />
-            <div className="flex gap-2">
-              <Skeleton className="h-10 w-24" />
-              <Skeleton className="h-10 w-24" />
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="space-y-3">
-              <Skeleton className="h-6 w-32" />
-              <div className="space-y-2">
-                <Skeleton className="h-16 w-full" />
-                <Skeleton className="h-16 w-full" />
-              </div>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-    </div>
-  </Layout>
-);
-
-const EmptyState = () => (
-  <div className="text-center py-12">
-    <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground" />
-    <h3 className="mt-4 text-lg font-medium">No Transactions Found</h3>
-    <p className="mt-1 text-sm text-muted-foreground">
-      {new Date().toLocaleString("id-ID", { month: "long", year: "numeric" })}{" "}
-      doesn't have any transactions yet.
-    </p>
-  </div>
-);
-
-interface GroupedTransactions {
-  date: string;
-  dateFormatted: string;
-  dayOfWeek: string;
-  transactions: Transaction[];
-  totalIncome: number;
-  totalExpense: number;
-  netAmount: number;
-}
+  TransactionsSkeleton,
+  useTransactionsAnalytics,
+  useTransactionsFilter,
+  TotalIncomeWidget,
+  TotalExpensesWidget,
+  TotalTransfersWidget,
+  TransactionsTableWidget,
+  TransactionsFilterWidget,
+  EnrichedTransaction,
+} from '@/components/transactions';
+import { cn } from '@/lib/utils';
 
 export default function Transactions() {
   const { user } = useAuth();
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingTransaction, setEditingTransaction] =
-    useState<Transaction | null>(null);
-  const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [selectedMonth, setSelectedMonth] = useState<string>("current");
-  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
-  const [transactionToDelete, setTransactionToDelete] = useState<string | null>(
-    null
-  );
 
-  const { data: transactions = [], isLoading } = useTransactions(
-    user?.id || ""
-  );
-  const { data: categories = [] } = useCategories(user?.id || "");
-  const { data: fundSources = [] } = useFundSources(user?.id || "");
+  // Queries
+  const { data: transactions = [], isLoading: isLoadingTx } = useTransactions(user?.id || '');
+  const { data: categories = [], isLoading: isLoadingCat } = useCategories(user?.id || '');
+  const { data: fundSources = [], isLoading: isLoadingFunds } = useFundSources(user?.id || '');
+
+  // Mutations
   const deleteTransactionMutation = useDeleteTransaction();
 
-  // Get available months from transactions
-  const availableMonths = useMemo(() => {
-    const months = new Set<string>();
-    transactions.forEach((t) => {
-      const date = new Date(t.transactionDate);
-      const monthKey = `${date.getFullYear()}-${String(
-        date.getMonth() + 1
-      ).padStart(2, "0")}`;
-      months.add(monthKey);
-    });
-    return Array.from(months).sort().reverse();
-  }, [transactions]);
+  // Dialog and panel states
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
+  const [isFilterOpen, setIsFilterOpen] = useState(true);
+  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 
-  // Filter transactions by selected month
-  const filteredTransactions = useMemo(() => {
-    const now = new Date();
-    let filtered = transactions;
-
-    if (selectedMonth === "current") {
-      // Current month
-      const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      const currentMonthEnd = new Date(
-        now.getFullYear(),
-        now.getMonth() + 1,
-        0,
-        23,
-        59,
-        59
-      );
-      filtered = transactions.filter((t) => {
-        const date = new Date(t.transactionDate);
-        return date >= currentMonthStart && date <= currentMonthEnd;
-      });
-    } else if (selectedMonth !== "all") {
-      // Specific month
-      const [year, month] = selectedMonth.split("-").map(Number);
-      const monthStart = new Date(year, month - 1, 1);
-      const monthEnd = new Date(year, month, 0, 23, 59, 59);
-      filtered = transactions.filter((t) => {
-        const date = new Date(t.transactionDate);
-        return date >= monthStart && date <= monthEnd;
-      });
+  // Responsive filter toggle: modal on mobile/small screen (< 1024px), sidebar toggle on desktop (>= 1024px)
+  const handleToggleFilter = () => {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      setIsMobileFilterOpen(true);
+    } else {
+      setIsFilterOpen((prev) => !prev);
     }
+  };
 
-    // Apply type filter
-    if (typeFilter !== "all") {
-      filtered = filtered.filter((t) => t.type === typeFilter);
-    }
+  // Filter & Pagination hook
+  const {
+    activeTab,
+    setActiveTab,
+    filters,
+    setFilters,
+    appliedFilters,
+    applyFilter,
+    resetFilter,
+    setDateRange,
+    sortField,
+    toggleSort,
+    currentPage,
+    setCurrentPage,
+    pageSize,
+    totalCount,
+    totalPages,
+    paginatedTransactions,
+    selectedIds,
+    toggleSelectAll,
+    toggleSelectRow,
+  } = useTransactionsFilter({
+    transactions,
+    categories,
+    fundSources,
+    pageSize: 10,
+  });
 
-    return filtered;
-  }, [transactions, selectedMonth, typeFilter]);
+  // Analytics hook
+  const analytics = useTransactionsAnalytics({
+    transactions,
+    startDate: appliedFilters.startDate || '2026-11-01',
+    endDate: appliedFilters.endDate || '2026-11-30',
+  });
 
-  // Group transactions by date
-  const groupedTransactions = useMemo<GroupedTransactions[]>(() => {
-    const groups: { [key: string]: GroupedTransactions } = {};
+  // Calculate active filters count
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (appliedFilters.search) count++;
+    if (appliedFilters.types.length < 3) count++;
+    if (appliedFilters.accountId !== 'all') count++;
+    if (appliedFilters.categoryId !== 'all') count++;
+    if (appliedFilters.minAmount || appliedFilters.maxAmount) count++;
+    if (appliedFilters.status !== 'all') count++;
+    return count;
+  }, [appliedFilters]);
 
-    filteredTransactions.forEach((transaction) => {
-      const date = new Date(transaction.transactionDate);
-      const dateKey = date.toISOString().split("T")[0];
-
-      if (!groups[dateKey]) {
-        groups[dateKey] = {
-          date: dateKey,
-          dateFormatted: date.toLocaleDateString("id-ID", {
-            day: "numeric",
-            month: "long",
-            year: "numeric",
-          }),
-          dayOfWeek: date.toLocaleDateString("id-ID", { weekday: "long" }),
-          transactions: [],
-          totalIncome: 0,
-          totalExpense: 0,
-          netAmount: 0,
-        };
+  // Date range label
+  const dateRangeLabel = useMemo(() => {
+    if (!appliedFilters.startDate && !appliedFilters.endDate) return 'All Time';
+    const formatDate = (isoStr: string) => {
+      try {
+        const d = new Date(isoStr);
+        return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      } catch {
+        return isoStr;
       }
-
-      groups[dateKey].transactions.push(transaction);
-
-      // Calculate totals
-      if (transaction.type === "income") {
-        groups[dateKey].totalIncome += transaction.amount;
-      } else if (transaction.type === "expense") {
-        groups[dateKey].totalExpense += transaction.amount;
-      }
-    });
-
-    // Calculate net amount and sort transactions within each group
-    Object.values(groups).forEach((group) => {
-      group.netAmount = group.totalIncome - group.totalExpense;
-      // Sort by time (most recent first within the same day)
-      group.transactions.sort(
-        (a, b) =>
-          new Date(b.transactionDate).getTime() -
-          new Date(a.transactionDate).getTime()
-      );
-    });
-
-    // Sort groups by date (most recent first)
-    return Object.values(groups).sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-    );
-  }, [filteredTransactions]);
-
-  // Calculate month summary
-  const monthSummary = useMemo(() => {
-    const summary = {
-      totalIncome: 0,
-      totalExpense: 0,
-      netAmount: 0,
-      transactionCount: filteredTransactions.length,
     };
+    return `${formatDate(appliedFilters.startDate)} - ${formatDate(appliedFilters.endDate)}`;
+  }, [appliedFilters.startDate, appliedFilters.endDate]);
 
-    filteredTransactions.forEach((t) => {
-      if (t.type === "income") {
-        summary.totalIncome += t.amount;
-      } else if (t.type === "expense") {
-        summary.totalExpense += t.amount;
-      }
-    });
-
-    summary.netAmount = summary.totalIncome - summary.totalExpense;
-    return summary;
-  }, [filteredTransactions]);
+  // Handlers
+  const handleEdit = (tx: EnrichedTransaction) => {
+    setEditingTransaction(tx);
+    setIsDialogOpen(true);
+  };
 
   const handleDelete = (id: string) => {
     setTransactionToDelete(id);
@@ -248,309 +140,224 @@ export default function Transactions() {
     if (!transactionToDelete) return;
     try {
       await deleteTransactionMutation.mutateAsync(transactionToDelete);
-      toast({ title: "Transaction deleted" });
+      toast({ title: 'Transaction deleted successfully' });
       setIsDeleteOpen(false);
       setTransactionToDelete(null);
-    } catch (error) {
+    } catch {
       toast({
-        title: "Error",
-        description: "Could not delete transaction.",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to delete transaction.',
+        variant: 'destructive',
       });
     }
   };
 
-  const handleCardClick = (transaction: Transaction) => {
-    setEditingTransaction(transaction);
-    setIsDialogOpen(true);
+  const handleExportCSV = () => {
+    if (transactions.length === 0) {
+      toast({ title: 'No transactions to export' });
+      return;
+    }
+    const headers = ['Date,Description,Type,Amount,Category,Account,Status\n'];
+    const rows = transactions.map((t) =>
+      `"${t.transactionDate}","${t.description}","${t.type}","${t.amount / 100}","${t.categoryId || ''}","${t.sourceFundId || ''}","${t.status || ''}"\n`
+    );
+    const blob = new Blob([...headers, ...rows], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `transactions_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: 'Transactions exported to CSV' });
   };
 
-  const handleDialogClose = () => {
-    setIsDialogOpen(false);
-    setEditingTransaction(null);
-  };
-
-  const getCategoryName = (categoryId?: string) =>
-    categories.find((c) => c.id === categoryId)?.name || "Uncategorized";
-
-  const getFundSourceName = (fundId?: string) =>
-    fundSources.find((s) => s.id === fundId)?.name || "N/A";
-
-  if (isLoading) {
-    return <TransactionLoading />;
+  if (isLoadingTx || isLoadingCat || isLoadingFunds) {
+    return (
+      <Layout>
+        <TransactionsSkeleton />
+      </Layout>
+    );
   }
 
   return (
     <Layout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="p-3.5 sm:p-6 lg:p-7 space-y-4 sm:space-y-6 max-w-[1600px] mx-auto">
+        {/* Header Section */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
           <div>
-            <h1 className="text-3xl font-bold">Transactions</h1>
-            <p className="text-muted-foreground">
-              Track all your financial movements
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-[#161F18] tracking-tight">
+              Transactions
+            </h1>
+            <p className="text-xs sm:text-[13px] text-[#737E75] mt-0.5">
+              Track and manage all your income, expenses, and transfers.
             </p>
           </div>
-          <Button
-            onClick={() => setIsDialogOpen(true)}
-            className="w-full sm:w-auto"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Add Transaction
-          </Button>
-        </div>
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Total Income
-                  </p>
-                  <p className="text-2xl font-bold text-success">
-                    {formatCurrency(monthSummary.totalIncome)}
-                  </p>
-                </div>
-                <div className="h-12 w-12 rounded-full bg-success/10 flex items-center justify-center">
-                  <TrendingUp className="h-6 w-6 text-success" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Total Expense
-                  </p>
-                  <p className="text-2xl font-bold text-destructive">
-                    {formatCurrency(monthSummary.totalExpense)}
-                  </p>
-                </div>
-                <div className="h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center">
-                  <TrendingDown className="h-6 w-6 text-destructive" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Net Amount
-                  </p>
-                  <p
-                    className={cn(
-                      "text-2xl font-bold",
-                      monthSummary.netAmount >= 0
-                        ? "text-success"
-                        : "text-destructive"
-                    )}
-                  >
-                    {formatCurrency(monthSummary.netAmount)}
-                  </p>
-                </div>
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Calendar className="h-6 w-6 text-primary" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Filters */}
-        <Card>
-          <CardHeader className="p-4 sm:p-6">
-            <div className="flex flex-col gap-4">
-              <div>
-                <CardTitle>Transaction History</CardTitle>
-                <CardDescription>
-                  {monthSummary.transactionCount} transactions found
-                </CardDescription>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                  <SelectTrigger className="w-full sm:w-[200px]">
-                    <SelectValue placeholder="Select month" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="current">Current Month</SelectItem>
-                    <SelectItem value="all">All Time</SelectItem>
-                    {availableMonths.map((month) => {
-                      const [year, monthNum] = month.split("-");
-                      const date = new Date(
-                        parseInt(year),
-                        parseInt(monthNum) - 1
-                      );
-                      const label = date.toLocaleDateString("id-ID", {
-                        month: "long",
-                        year: "numeric",
-                      });
-                      return (
-                        <SelectItem key={month} value={month}>
-                          {label}
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-
-                <ToggleGroup
-                  type="single"
-                  value={typeFilter}
-                  onValueChange={(value) => value && setTypeFilter(value)}
-                  className="justify-start"
+          <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+            {/* Import / Export Dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 sm:h-10 px-3.5 rounded-xl text-xs font-semibold border-[#EDF1EB] bg-white text-[#161F18] hover:bg-[#F6F7F5] gap-2 shadow-2xs"
                 >
-                  <ToggleGroupItem
-                    value="all"
-                    className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-                  >
-                    All
-                  </ToggleGroupItem>
-                  <ToggleGroupItem
-                    value="income"
-                    className="data-[state=on]:bg-success data-[state=on]:text-white"
-                  >
-                    Income
-                  </ToggleGroupItem>
-                  <ToggleGroupItem
-                    value="expense"
-                    className="data-[state=on]:bg-destructive data-[state=on]:text-white"
-                  >
-                    Expense
-                  </ToggleGroupItem>
-                  <ToggleGroupItem
-                    value="transfer"
-                    className="data-[state=on]:bg-blue-600 data-[state=on]:text-white"
-                  >
-                    Transfer
-                  </ToggleGroupItem>
-                </ToggleGroup>
-              </div>
-            </div>
-          </CardHeader>
+                  <Upload className="w-3.5 h-3.5 text-[#161F18]" />
+                  <span>Import</span>
+                  <ChevronDown className="w-3.5 h-3.5 text-[#6D776F] -ml-0.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48 rounded-xl border-[#EDF1EB] text-xs">
+                <DropdownMenuItem onClick={handleExportCSV}>
+                  <Download className="mr-2 w-3.5 h-3.5 text-[#6D776F]" />
+                  <span>Export as CSV</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() =>
+                    toast({
+                      title: 'CSV Import',
+                      description: 'Import wizard is ready. Drag and drop CSV to import.',
+                    })
+                  }
+                >
+                  <FileSpreadsheet className="mr-2 w-3.5 h-3.5 text-[#6D776F]" />
+                  <span>Upload CSV file</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-          <CardContent className="p-4 sm:p-6">
-            {groupedTransactions.length > 0 ? (
-              <div className="space-y-6">
-                {groupedTransactions.map((group) => (
-                  <div key={group.date} className="space-y-3">
-                    {/* Date Header with Summary */}
-                    <div className="flex items-center justify-between pb-2 border-b">
-                      <div>
-                        <h3 className="font-semibold text-base">
-                          {group.dateFormatted}
-                        </h3>
-                        <p className="text-xs text-muted-foreground">
-                          {group.dayOfWeek}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-3 text-sm">
-                        <div className="flex items-center gap-1 text-success">
-                          <TrendingUp className="h-4 w-4" />
-                          <span className="font-medium">
-                            {formatCurrency(group.totalIncome)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1 text-destructive">
-                          <TrendingDown className="h-4 w-4" />
-                          <span className="font-medium">
-                            {formatCurrency(group.totalExpense)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
+            {/* Add Transaction Button */}
+            <Button
+              onClick={() => {
+                setEditingTransaction(null);
+                setIsDialogOpen(true);
+              }}
+              size="sm"
+              className="h-9 sm:h-10 px-4 rounded-xl text-xs font-semibold bg-[#4F9B3F] hover:bg-[#3E7A31] text-white gap-2 shadow-2xs"
+            >
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              <span>Add Transaction</span>
+            </Button>
+          </div>
+        </div>
 
-                    {/* Transactions List */}
-                    <div className="space-y-2">
-                      {group.transactions.map((t) => (
-                        <Card
-                          key={t.id}
-                          className="hover:shadow-md transition-all cursor-pointer hover:border-primary/50"
-                          onClick={() => handleCardClick(t)}
-                        >
-                          <CardContent className="p-4">
-                            <div className="flex items-center gap-3">
-                              {/* Icon */}
-                              <div className="flex-shrink-0">
-                                <TransactionIcon type={t.type} />
-                              </div>
+        {/* Top 3 Stat Cards Widgets */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 sm:gap-4">
+          {/* Widget 1: Total Income */}
+          <TotalIncomeWidget
+            totalAmount={analytics.totalIncome}
+            momPercent={analytics.incomeMomPercent}
+            sparklineData={analytics.incomeSparkline}
+          />
 
-                              {/* Main Info */}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="flex-1 min-w-0">
-                                    <p className="font-medium truncate">
-                                      {t.description}
-                                    </p>
-                                    <div className="flex flex-wrap items-center gap-2 mt-1">
-                                      <Badge
-                                        variant="outline"
-                                        className="text-xs"
-                                      >
-                                        {t.type === "transfer"
-                                          ? `${getFundSourceName(
-                                              t.sourceFundId
-                                            )} → ${getFundSourceName(
-                                              t.destinationFundId
-                                            )}`
-                                          : getCategoryName(t.categoryId)}
-                                      </Badge>
-                                      {t.type !== "transfer" && (
-                                        <span className="text-xs text-muted-foreground">
-                                          •{" "}
-                                          {getFundSourceName(
-                                            t.type === "income"
-                                              ? t.destinationFundId
-                                              : t.sourceFundId
-                                          )}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
+          {/* Widget 2: Total Expenses */}
+          <TotalExpensesWidget
+            totalAmount={analytics.totalExpense}
+            momPercent={analytics.expenseMomPercent}
+            sparklineData={analytics.expenseSparkline}
+          />
 
-                                  {/* Amount */}
-                                  <div className="flex-shrink-0">
-                                    <p
-                                      className={cn(
-                                        "font-bold text-lg whitespace-nowrap",
-                                        t.type === "income" && "text-success",
-                                        t.type === "expense" &&
-                                          "text-destructive",
-                                        t.type === "transfer" && "text-primary"
-                                      )}
-                                    >
-                                      {t.type === "income" && "+"}
-                                      {t.type === "expense" && "-"}
-                                      {formatCurrency(t.amount)}
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState />
+          {/* Widget 3: Total Transfers */}
+          <TotalTransfersWidget
+            totalAmount={analytics.totalTransfer}
+            momPercent={analytics.transferMomPercent}
+            sparklineData={analytics.transferSparkline}
+          />
+        </div>
+
+        {/* Main Workspace Grid (Table + Filter Sidebar) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-start">
+          {/* Widget 4: Transactions Table */}
+          <div
+            className={cn(
+              'transition-all duration-200 w-full min-w-0',
+              isFilterOpen ? 'lg:col-span-8 xl:col-span-9' : 'lg:col-span-12'
             )}
-          </CardContent>
-        </Card>
+          >
+            <TransactionsTableWidget
+              transactions={paginatedTransactions}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              dateRangeLabel={dateRangeLabel}
+              onDateRangeClick={handleToggleFilter}
+              onToggleFilter={handleToggleFilter}
+              isFilterOpen={isFilterOpen}
+              activeFilterCount={activeFilterCount}
+              sortField={sortField}
+              onSort={toggleSort}
+              selectedIds={selectedIds}
+              onSelectAll={toggleSelectAll}
+              onSelectRow={toggleSelectRow}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              currentPage={currentPage}
+              totalPages={totalPages}
+              pageSize={pageSize}
+              totalCount={totalCount}
+              onPageChange={setCurrentPage}
+            />
+          </div>
+
+          {/* Widget 5: Transactions Filter Sidebar (Desktop >= 1024px only) */}
+          {isFilterOpen && (
+            <div className="hidden lg:block lg:col-span-4 xl:col-span-3 sticky top-6 w-full min-w-0">
+              <TransactionsFilterWidget
+                filters={filters}
+                onFilterChange={setFilters}
+                onApply={applyFilter}
+                onReset={resetFilter}
+                categories={categories}
+                fundSources={fundSources}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
+      {/* Mobile / Small-screen Filter Modal Popup (< 1024px) */}
+      <Dialog open={isMobileFilterOpen} onOpenChange={setIsMobileFilterOpen}>
+        <DialogContent className="max-w-md w-[calc(100%-2rem)] max-h-[85vh] overflow-y-auto p-0 rounded-2xl border-[#EDF1EB] bg-white shadow-xl">
+          <DialogHeader className="p-4 sm:p-5 border-b border-[#EDF1EB] text-left">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-[#EAF5E5] text-[#4F9B3F] flex items-center justify-center shrink-0">
+                <SlidersHorizontal className="w-4 h-4 stroke-[2.2]" />
+              </div>
+              <div>
+                <DialogTitle className="text-sm sm:text-base font-bold text-[#161F18]">
+                  Filter Transactions
+                </DialogTitle>
+                <DialogDescription className="text-xs text-[#737E75] mt-0.5">
+                  Filter transactions by date range, type, category, account, or amount.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="p-4 sm:p-5">
+            <TransactionsFilterWidget
+              filters={filters}
+              onFilterChange={setFilters}
+              onApply={() => {
+                applyFilter();
+                setIsMobileFilterOpen(false);
+              }}
+              onReset={resetFilter}
+              categories={categories}
+              fundSources={fundSources}
+              isModal
+              onClose={() => setIsMobileFilterOpen(false)}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialogs */}
       <TransactionDialog
         open={isDialogOpen}
-        onClose={handleDialogClose}
+        onClose={() => {
+          setIsDialogOpen(false);
+          setEditingTransaction(null);
+        }}
         transaction={editingTransaction}
         onDelete={
           editingTransaction

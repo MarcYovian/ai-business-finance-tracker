@@ -73,6 +73,11 @@ describe('Storage', () => {
         type: 'expense',
         parentId: null,
         createdAt: mockCategory.created_at,
+        color: null,
+        icon: null,
+        description: null,
+        sort_order: null,
+        is_active: true,
       });
     });
 
@@ -100,6 +105,11 @@ describe('Storage', () => {
         type: 'expense',
         parentId: 'cat1',
         createdAt: mockCategory.created_at,
+        color: null,
+        icon: null,
+        description: null,
+        sort_order: null,
+        is_active: true,
       });
     });
   });
