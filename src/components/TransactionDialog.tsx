@@ -13,6 +13,7 @@ import {
   SelectGroup,
   SelectItem,
   SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -36,13 +37,18 @@ import { Transaction } from "@/types/finance";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   AlertTriangle,
+  Calendar as CalendarIcon,
   CheckCircle2,
+  ChevronDown,
   Trash2,
   TrendingDown,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { format } from "date-fns";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Calendar } from "./ui/calendar";
 import { Alert, AlertDescription } from "./ui/alert";
 import {
   Form,
@@ -63,7 +69,25 @@ const transactionSchema = z
         message: "Amount must be a positive number.",
       }),
     type: z.enum(["income", "expense", "transfer"]),
-    transactionDate: z.string().min(1, "Date is required."),
+    transactionDate: z
+      .string()
+      .min(1, "Date is required.")
+      .refine(
+        (val) => {
+          if (!val) return false;
+          const parts = val.split("-").map(Number);
+          if (parts.length < 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) {
+            return false;
+          }
+          const selected = new Date(parts[0], parts[1] - 1, parts[2]);
+          const today = new Date();
+          today.setHours(23, 59, 59, 999);
+          return selected <= today;
+        },
+        {
+          message: "Transaction date cannot be after today.",
+        }
+      ),
     categoryId: z.string().nullable().optional(),
     sourceFundId: z.string().nullable().optional(),
     destinationFundId: z.string().nullable().optional(),
@@ -150,6 +174,8 @@ export const TransactionDialog = ({
   const amountString = form.watch("amount");
   const transactionDate = form.watch("transactionDate");
 
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+
   const { data: allTransactions = [] } = useTransactions(user?.id || "");
   const { data: categories = [] } = useCategories(
     user?.id || "",
@@ -167,6 +193,7 @@ export const TransactionDialog = ({
 
   useEffect(() => {
     if (open) {
+      setIsCalendarOpen(false);
       if (transaction) {
         const feeAmount =
           transaction.type === "transfer"
@@ -260,6 +287,8 @@ export const TransactionDialog = ({
 
     const amountValue = parseCurrencyWithoutMultiplier(data.amount);
     const feeValue = data.fee ? parseCurrencyWithoutMultiplier(data.fee) : 0;
+    const resolvedCategoryId =
+      data.categoryId && data.categoryId !== "__none" ? data.categoryId : undefined;
 
     try {
       if (transaction) {
@@ -269,7 +298,7 @@ export const TransactionDialog = ({
             ...data,
             amount: amountValue,
             transactionDate: new Date(data.transactionDate).toISOString(),
-            categoryId: data.categoryId || undefined,
+            categoryId: resolvedCategoryId,
             sourceFundId: data.sourceFundId || undefined,
             destinationFundId: data.destinationFundId || undefined,
             fee: feeValue,
@@ -286,7 +315,7 @@ export const TransactionDialog = ({
           amount: amountValue,
           transactionDate: new Date(data.transactionDate).toISOString(),
           userId: user.id,
-          categoryId: data.categoryId || undefined,
+          categoryId: resolvedCategoryId,
           sourceFundId: data.sourceFundId || undefined,
           destinationFundId: data.destinationFundId || undefined,
           fee: feeValue,
@@ -405,15 +434,111 @@ export const TransactionDialog = ({
             <FormField
               control={form.control}
               name="transactionDate"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Date</FormLabel>
-                  <FormControl>
-                    <Input type="date" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
+              render={({ field }) => {
+                const parseDateValue = (val?: string) => {
+                  if (!val) return null;
+                  const parts = val.split("-").map(Number);
+                  if (parts.length < 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) {
+                    return null;
+                  }
+                  return new Date(parts[0], parts[1] - 1, parts[2]);
+                };
+
+                const dateObj = parseDateValue(field.value);
+
+                return (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Date</FormLabel>
+                    <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant="outline"
+                            type="button"
+                            className={cn(
+                              "w-full h-10 px-3.5 text-left font-normal justify-between rounded-xl border-input bg-background hover:bg-accent/50 text-foreground transition-colors shadow-2xs",
+                              !field.value && "text-muted-foreground"
+                            )}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="w-6 h-6 rounded-lg bg-[#EAF5E5] text-[#4F9B3F] flex items-center justify-center shrink-0">
+                                <CalendarIcon className="h-3.5 w-3.5 stroke-[2.2]" />
+                              </div>
+                              <span className="text-xs sm:text-sm font-medium truncate">
+                                {dateObj ? format(dateObj, "EEEE, d MMMM yyyy") : "Pick a date"}
+                              </span>
+                            </div>
+                            <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 ml-2" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        className="w-auto p-3 rounded-2xl border border-border bg-popover shadow-xl z-[70]"
+                        align="start"
+                      >
+                        {/* Quick Presets */}
+                        <div className="flex items-center gap-1.5 pb-2.5 mb-2 border-b border-border">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const today = new Date();
+                              const y = today.getFullYear();
+                              const m = String(today.getMonth() + 1).padStart(2, "0");
+                              const d = String(today.getDate()).padStart(2, "0");
+                              field.onChange(`${y}-${m}-${d}`);
+                              setIsCalendarOpen(false);
+                            }}
+                            className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-secondary/50 hover:bg-[#EAF5E5] hover:text-[#3D7829] text-muted-foreground transition-colors"
+                          >
+                            Today
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const yest = new Date();
+                              yest.setDate(yest.getDate() - 1);
+                              const y = yest.getFullYear();
+                              const m = String(yest.getMonth() + 1).padStart(2, "0");
+                              const d = String(yest.getDate()).padStart(2, "0");
+                              field.onChange(`${y}-${m}-${d}`);
+                              setIsCalendarOpen(false);
+                            }}
+                            className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-secondary/50 hover:bg-[#EAF5E5] hover:text-[#3D7829] text-muted-foreground transition-colors"
+                          >
+                            Yesterday
+                          </button>
+                        </div>
+
+                        <Calendar
+                          mode="single"
+                          selected={dateObj || undefined}
+                          disabled={(date) => {
+                            const today = new Date();
+                            today.setHours(23, 59, 59, 999);
+                            return date > today;
+                          }}
+                          onSelect={(date) => {
+                            if (date) {
+                              const today = new Date();
+                              today.setHours(23, 59, 59, 999);
+                              if (date > today) return;
+
+                              const y = date.getFullYear();
+                              const m = String(date.getMonth() + 1).padStart(2, "0");
+                              const d = String(date.getDate()).padStart(2, "0");
+                              field.onChange(`${y}-${m}-${d}`);
+                              setIsCalendarOpen(false);
+                            }
+                          }}
+                          initialFocus
+                          className="rounded-xl pointer-events-auto"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
             />
 
             {type !== "transfer" && (
@@ -425,32 +550,53 @@ export const TransactionDialog = ({
                     <FormLabel>Category</FormLabel>
                     <Select
                       onValueChange={field.onChange}
-                      value={field.value || "__none"}
+                      value={field.value || ""}
                     >
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select category" />
+                        <SelectTrigger className="h-10 rounded-xl border-[#E2E6DF] dark:border-border bg-background text-xs sm:text-sm">
+                          <SelectValue placeholder="Select category..." />
                         </SelectTrigger>
                       </FormControl>
-                      <SelectContent>
-                        <SelectItem value="__none">None</SelectItem>
-                        {parentCategories.map((parent) => (
-                          <SelectGroup key={parent.id}>
-                            <SelectLabel>{parent.name}</SelectLabel>
-                            <SelectItem value={parent.id} className="pl-6">
-                              {parent.name}
-                            </SelectItem>
-                            {getSubCategories(parent.id).map((sub) => (
-                              <SelectItem
-                                key={sub.id}
-                                value={sub.id}
-                                className="pl-8"
-                              >
-                                {sub.name}
-                              </SelectItem>
-                            ))}
-                          </SelectGroup>
-                        ))}
+                      <SelectContent className="max-h-[300px] rounded-2xl border border-[#EDF1EB] dark:border-border bg-popover shadow-xl z-[70]">
+                        <SelectItem
+                          value="__none"
+                          className="text-xs font-normal text-[#869288]"
+                        >
+                          None (Uncategorized)
+                        </SelectItem>
+                        <SelectSeparator className="my-1 border-t border-border" />
+                        {parentCategories.length === 0 ? (
+                          <div className="p-3 text-xs text-[#869288] text-center">
+                            No categories available.
+                          </div>
+                        ) : (
+                          parentCategories.map((parent) => {
+                            const childCategories = getSubCategories(parent.id);
+
+                            return (
+                              <SelectGroup key={parent.id}>
+                                <SelectLabel className="text-[11px] font-bold text-[#172019] dark:text-zinc-200 px-2 pt-1.5">
+                                  {parent.name}
+                                </SelectLabel>
+                                <SelectItem
+                                  value={parent.id}
+                                  className="text-xs font-semibold"
+                                >
+                                  {parent.name} (Entire Category)
+                                </SelectItem>
+                                {childCategories.map((child) => (
+                                  <SelectItem
+                                    key={child.id}
+                                    value={child.id}
+                                    className="text-xs pl-5 font-normal text-[#556057] dark:text-zinc-400"
+                                  >
+                                    ↳ {child.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                            );
+                          })
+                        )}
                       </SelectContent>
                     </Select>
                     <FormMessage />

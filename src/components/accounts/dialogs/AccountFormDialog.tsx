@@ -18,7 +18,6 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { FundSource, FundType } from '@/types/finance';
-import { parseCurrency } from '@/lib/currency';
 import { ACCOUNT_TYPE_LABELS } from '../constants';
 
 interface AccountFormDialogProps {
@@ -35,6 +34,16 @@ interface AccountFormDialogProps {
   }) => Promise<void>;
 }
 
+// Helper to format currency for input while preserving negative sign for credit cards/debt
+const formatBalanceForInput = (value: number | string): string => {
+  const str = String(value).trim();
+  const isNegative = str.startsWith('-');
+  const digits = str.replace(/[^\d]/g, '');
+  if (!digits) return isNegative ? '-' : '';
+  const formatted = new Intl.NumberFormat('id-ID').format(Number(digits));
+  return isNegative ? `-${formatted}` : formatted;
+};
+
 export const AccountFormDialog: React.FC<AccountFormDialogProps> = ({
   open,
   onOpenChange,
@@ -45,7 +54,7 @@ export const AccountFormDialog: React.FC<AccountFormDialogProps> = ({
 
   const [name, setName] = useState('');
   const [type, setType] = useState<FundType>('bank');
-  const [balanceInput, setBalanceInput] = useState('');
+  const [balanceInput, setBalanceInput] = useState('0');
   const [accountNumber, setAccountNumber] = useState('');
   const [accountHolderName, setAccountHolderName] = useState('');
   const [isActive, setIsActive] = useState(true);
@@ -55,8 +64,9 @@ export const AccountFormDialog: React.FC<AccountFormDialogProps> = ({
     if (account) {
       setName(account.name || '');
       setType(account.type || 'bank');
-      // account.balance is in cents
-      setBalanceInput(String(Math.round(account.balance / 100)));
+      // account.balance is in cents -> convert to whole rupiah
+      const rupiah = Math.round(account.balance / 100);
+      setBalanceInput(formatBalanceForInput(rupiah));
       setAccountNumber(account.account_number || '');
       setAccountHolderName(account.account_holder_name || '');
       setIsActive(account.is_active !== false);
@@ -70,6 +80,11 @@ export const AccountFormDialog: React.FC<AccountFormDialogProps> = ({
     }
   }, [account, open]);
 
+  const handleBalanceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    setBalanceInput(formatBalanceForInput(raw));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
@@ -80,7 +95,7 @@ export const AccountFormDialog: React.FC<AccountFormDialogProps> = ({
       const rawNum = balanceInput.trim();
       const isNegative = rawNum.startsWith('-');
       const cleanDigits = rawNum.replace(/[^\d]/g, '');
-      const parsedRupiah = Number(cleanDigits) * (isNegative ? -1 : 1);
+      const parsedRupiah = (Number(cleanDigits) || 0) * (isNegative ? -1 : 1);
       const balanceInCents = parsedRupiah * 100;
 
       await onSubmit({
@@ -144,21 +159,27 @@ export const AccountFormDialog: React.FC<AccountFormDialogProps> = ({
             </Select>
           </div>
 
-          {/* Initial / Current Balance */}
+          {/* Initial / Current Balance - Formatted with Rp prefix like TransactionDialog */}
           <div className="space-y-1.5">
             <Label htmlFor="account-balance" className="text-xs font-semibold text-[#161F18]">
-              {isEditing ? 'Current Balance (IDR)' : 'Initial Balance (IDR)'}
+              {isEditing ? 'Current Balance' : 'Initial Balance'}
             </Label>
-            <Input
-              id="account-balance"
-              type="text"
-              placeholder="0 (or -2000000 for credit card)"
-              value={balanceInput}
-              onChange={(e) => setBalanceInput(e.target.value)}
-              className="rounded-xl border-[#EDF1EB] text-sm"
-            />
+            <div className="relative">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-semibold text-[#737E75]">
+                Rp
+              </span>
+              <Input
+                id="account-balance"
+                type="text"
+                inputMode="numeric"
+                placeholder="0"
+                value={balanceInput}
+                onChange={handleBalanceChange}
+                className="pl-11 pr-3 text-right font-bold text-sm text-[#161F18] rounded-xl border-[#EDF1EB] focus-visible:ring-1 focus-visible:ring-[#529E42]"
+              />
+            </div>
             <p className="text-[11px] text-[#8B968D]">
-              Note: Use negative values (e.g. -2000000) for credit cards or outstanding debt.
+              Gunakan tanda minus (misal: -2.000.000) untuk kartu kredit atau saldo hutang.
             </p>
           </div>
 

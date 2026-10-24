@@ -1,7 +1,13 @@
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,6 +58,10 @@ interface TransactionsTableWidgetProps {
   activeTab: TransactionTab;
   onTabChange: (tab: TransactionTab) => void;
   dateRangeLabel: string;
+  startDate?: string;
+  endDate?: string;
+  datePreset?: string;
+  onDateRangeChange?: (startDate: string, endDate: string, preset?: string) => void;
   onDateRangeClick?: () => void;
   onToggleFilter?: () => void;
   isFilterOpen?: boolean;
@@ -75,6 +85,9 @@ export function TransactionsTableWidget({
   activeTab,
   onTabChange,
   dateRangeLabel,
+  startDate,
+  endDate,
+  onDateRangeChange,
   onDateRangeClick,
   onToggleFilter,
   isFilterOpen,
@@ -92,6 +105,82 @@ export function TransactionsTableWidget({
   totalCount,
   onPageChange,
 }: TransactionsTableWidgetProps) {
+  const todayStr = React.useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }, []);
+
+  const firstDayOfMonthStr = React.useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    return `${y}-${m}-01`;
+  }, []);
+
+  const [isDatePopoverOpen, setIsDatePopoverOpen] = React.useState(false);
+  const [customStart, setCustomStart] = React.useState(startDate || firstDayOfMonthStr);
+  const [customEnd, setCustomEnd] = React.useState(
+    endDate ? (endDate > todayStr ? todayStr : endDate) : todayStr
+  );
+
+  React.useEffect(() => {
+    if (startDate) setCustomStart(startDate);
+    if (endDate) setCustomEnd(endDate > todayStr ? todayStr : endDate);
+  }, [startDate, endDate, todayStr]);
+
+  const handleApplyPreset = (preset: 'current' | 'last_month' | 'last_30_days' | 'all') => {
+    const now = new Date();
+    let start = '';
+    let end = '';
+
+    if (preset === 'current') {
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      start = `${y}-${m}-01`;
+      end = todayStr;
+    } else if (preset === 'last_month') {
+      const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const last = new Date(now.getFullYear(), now.getMonth(), 0);
+      const y = first.getFullYear();
+      const m = String(first.getMonth() + 1).padStart(2, '0');
+      const d = String(last.getDate()).padStart(2, '0');
+      start = `${y}-${m}-01`;
+      end = `${y}-${m}-${d}`;
+    } else if (preset === 'last_30_days') {
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const y1 = thirtyDaysAgo.getFullYear();
+      const m1 = String(thirtyDaysAgo.getMonth() + 1).padStart(2, '0');
+      const d1 = String(thirtyDaysAgo.getDate()).padStart(2, '0');
+      start = `${y1}-${m1}-${d1}`;
+      end = todayStr;
+    } else if (preset === 'all') {
+      start = '';
+      end = todayStr;
+    }
+
+    setCustomStart(start);
+    setCustomEnd(end);
+    onDateRangeChange?.(start, end, preset);
+    setIsDatePopoverOpen(false);
+  };
+
+  const handleApplyCustom = () => {
+    let s = customStart;
+    let e = customEnd;
+    if (s && s > todayStr) s = todayStr;
+    if (e && e > todayStr) e = todayStr;
+    if (s && e && s > e) {
+      s = e;
+    }
+    setCustomStart(s);
+    setCustomEnd(e);
+    onDateRangeChange?.(s, e, 'custom');
+    setIsDatePopoverOpen(false);
+  };
+
   // Format transaction date (e.g. 10 Nov 2026)
   const formatTxDate = (dateStr: string) => {
     try {
@@ -357,25 +446,131 @@ export function TransactionsTableWidget({
             })}
           </div>
 
-          {/* Date Picker Button & Filter Toggle */}
+          {/* Date Picker Popover & Filter Toggle */}
           <div className="flex items-center justify-between sm:justify-end gap-2 w-full md:w-auto">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onDateRangeClick}
-              className="flex-1 sm:flex-none h-9 px-2.5 sm:px-3.5 rounded-xl text-xs font-medium border-[#EDF1EB] bg-white text-[#161F18] hover:bg-[#F6F7F5] gap-1.5 sm:gap-2 shadow-2xs truncate"
-            >
-              <Calendar className="w-3.5 h-3.5 text-[#6D776F] shrink-0" />
-              <span className="truncate">{dateRangeLabel}</span>
-              <ChevronDown className="w-3.5 h-3.5 text-[#6D776F] ml-0.5 shrink-0" />
-            </Button>
+            <Popover open={isDatePopoverOpen} onOpenChange={setIsDatePopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 sm:flex-none h-9 px-2.5 sm:px-3.5 rounded-xl text-xs font-medium border-[#EDF1EB] bg-white text-[#161F18] hover:bg-[#F6F7F5] gap-1.5 sm:gap-2 shadow-2xs truncate"
+                >
+                  <Calendar className="w-3.5 h-3.5 text-[#6D776F] shrink-0" />
+                  <span className="truncate">{dateRangeLabel}</span>
+                  <ChevronDown className="w-3.5 h-3.5 text-[#6D776F] ml-0.5 shrink-0" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                className="w-72 sm:w-80 p-4 rounded-2xl border border-[#EDF1EB] bg-white shadow-xl z-[70] space-y-3.5"
+                align="end"
+              >
+                <div className="flex items-center justify-between pb-2 border-b border-[#EDF1EB]">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-[#EAF5E5] text-[#4F9B3F] flex items-center justify-center">
+                      <Calendar className="w-3.5 h-3.5 stroke-[2.2]" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-[#161F18]">Filter Tanggal</h4>
+                      <p className="text-[10px] text-[#737E75]">Pilih rentang tanggal transaksi</p>
+                    </div>
+                  </div>
+                </div>
 
+                {/* Quick Presets */}
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPreset('current')}
+                    className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-[#EDF1EB] bg-[#F9FAF8] hover:bg-[#EAF5E5] hover:text-[#3D7829] text-[#161F18] transition-colors text-center"
+                  >
+                    Bulan Ini
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPreset('last_month')}
+                    className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-[#EDF1EB] bg-[#F9FAF8] hover:bg-[#EAF5E5] hover:text-[#3D7829] text-[#161F18] transition-colors text-center"
+                  >
+                    Bulan Lalu
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPreset('last_30_days')}
+                    className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-[#EDF1EB] bg-[#F9FAF8] hover:bg-[#EAF5E5] hover:text-[#3D7829] text-[#161F18] transition-colors text-center"
+                  >
+                    30 Hari Terakhir
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPreset('all')}
+                    className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-[#EDF1EB] bg-[#F9FAF8] hover:bg-[#EAF5E5] hover:text-[#3D7829] text-[#161F18] transition-colors text-center"
+                  >
+                    Semua Waktu
+                  </button>
+                </div>
+
+                {/* Custom Date Inputs */}
+                <div className="space-y-2 pt-1 border-t border-[#EDF1EB]">
+                  <span className="text-[11px] font-bold text-[#161F18] block">Rentang Kustom</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-medium text-[#737E75]">Dari</label>
+                      <Input
+                        type="date"
+                        max={todayStr}
+                        value={customStart}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setCustomStart(val > todayStr ? todayStr : val);
+                        }}
+                        className="h-8 text-xs rounded-xl border-[#E5EAE3] px-2"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-medium text-[#737E75]">Sampai</label>
+                      <Input
+                        type="date"
+                        max={todayStr}
+                        value={customEnd}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setCustomEnd(val > todayStr ? todayStr : val);
+                        }}
+                        className="h-8 text-xs rounded-xl border-[#E5EAE3] px-2"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#EDF1EB]">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsDatePopoverOpen(false)}
+                    className="h-8 px-3 rounded-xl text-xs font-semibold border-[#EDF1EB]"
+                  >
+                    Batal
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleApplyCustom}
+                    className="h-8 px-3.5 rounded-xl text-xs font-semibold bg-[#4F9B3F] hover:bg-[#3E7A31] text-white"
+                  >
+                    Terapkan
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {/* Filter Toggle Button - ONLY VISIBLE ON MOBILE & TABLET (< 1024px) */}
             <Button
               variant="outline"
               size="sm"
               onClick={onToggleFilter}
               className={cn(
-                'h-9 px-3 sm:px-3.5 rounded-xl text-xs font-medium border-[#EDF1EB] bg-white text-[#161F18] hover:bg-[#F6F7F5] gap-1.5 shadow-2xs shrink-0',
+                'lg:hidden h-9 px-3 sm:px-3.5 rounded-xl text-xs font-medium border-[#EDF1EB] bg-white text-[#161F18] hover:bg-[#F6F7F5] gap-1.5 shadow-2xs shrink-0',
                 isFilterOpen && 'bg-[#F6F7F5] border-[#D0D7CF]'
               )}
             >

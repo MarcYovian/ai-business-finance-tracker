@@ -1,10 +1,23 @@
 import { TransactionFilterState } from './types';
 
+const getInitialDateRange = () => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return {
+    start: `${y}-${m}-01`,
+    end: `${y}-${m}-${d}`,
+  };
+};
+
+const initialDates = getInitialDateRange();
+
 export const DEFAULT_TRANSACTION_FILTERS: TransactionFilterState = {
   search: '',
-  datePreset: 'custom',
-  startDate: '2026-11-01',
-  endDate: '2026-11-30',
+  datePreset: 'current',
+  startDate: initialDates.start,
+  endDate: initialDates.end,
   types: ['income', 'expense', 'transfer'],
   accountId: 'all',
   categoryId: 'all',

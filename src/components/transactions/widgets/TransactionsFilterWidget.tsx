@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,6 @@ import {
 } from '@/components/ui/select';
 import {
   Search,
-  Calendar,
   Building2,
   Tag,
   BarChart2,
@@ -24,7 +23,7 @@ import {
 } from 'lucide-react';
 import { Category, FundSource, TransactionType } from '@/types/finance';
 import { TransactionFilterState } from '../types';
-import { DATE_RANGE_PRESETS, STATUS_OPTIONS } from '../constants';
+import { STATUS_OPTIONS } from '../constants';
 import { cn } from '@/lib/utils';
 
 interface TransactionsFilterWidgetProps {
@@ -50,18 +49,6 @@ export function TransactionsFilterWidget({
   isModal = false,
   onClose,
 }: TransactionsFilterWidgetProps) {
-  const startPickerRef = useRef<HTMLInputElement>(null);
-  const endPickerRef = useRef<HTMLInputElement>(null);
-
-  const formatDisplayDate = (isoStr: string, fallback: string) => {
-    if (!isoStr) return fallback;
-    try {
-      const d = new Date(`${isoStr}T00:00:00`);
-      return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-    } catch {
-      return isoStr;
-    }
-  };
   // Toggle transaction type in checkbox list
   const handleTypeToggle = (type: TransactionType) => {
     onFilterChange((prev) => {
@@ -74,42 +61,6 @@ export function TransactionsFilterWidget({
         types: updatedTypes,
       };
     });
-  };
-
-  // Handle Preset Date Range Selection
-  const handlePresetChange = (preset: string) => {
-    const now = new Date();
-    let start = '';
-    let end = '';
-
-    if (preset === 'current') {
-      const first = new Date(now.getFullYear(), now.getMonth(), 1);
-      const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-      start = first.toISOString().split('T')[0];
-      end = last.toISOString().split('T')[0];
-    } else if (preset === 'last_month') {
-      const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const last = new Date(now.getFullYear(), now.getMonth(), 0);
-      start = first.toISOString().split('T')[0];
-      end = last.toISOString().split('T')[0];
-    } else if (preset === 'last_30_days') {
-      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      start = thirtyDaysAgo.toISOString().split('T')[0];
-      end = now.toISOString().split('T')[0];
-    } else if (preset === 'all') {
-      start = '';
-      end = '';
-    } else {
-      start = filters.startDate;
-      end = filters.endDate;
-    }
-
-    onFilterChange((prev) => ({
-      ...prev,
-      datePreset: preset,
-      startDate: start,
-      endDate: end,
-    }));
   };
 
   const formContent = (
@@ -125,92 +76,6 @@ export function TransactionsFilterWidget({
             placeholder="Search in transactions..."
             className="pl-9 h-9 text-xs rounded-xl border-[#E5EAE3] bg-white text-[#161F18] focus-visible:ring-[#4F9B3F] placeholder:text-[#8B968D]"
           />
-        </div>
-
-        {/* Date Range */}
-        <div className="space-y-2 pt-1">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-[#161F18]">
-            <Calendar className="w-3.5 h-3.5 text-[#161F18]" />
-            <span>Date Range</span>
-          </div>
-
-          <Select value={filters.datePreset} onValueChange={handlePresetChange}>
-            <SelectTrigger className="h-9 text-xs rounded-xl border-[#E5EAE3] bg-white text-[#161F18]">
-              <SelectValue placeholder="Custom range" />
-            </SelectTrigger>
-            <SelectContent className="rounded-xl border-[#EDF1EB] text-xs">
-              {DATE_RANGE_PRESETS.map((p) => (
-                <SelectItem key={p.value} value={p.value} className="text-xs">
-                  {p.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {/* Start and End inputs matching mockup */}
-          <div className="grid grid-cols-[1fr,auto,1fr] gap-1.5 items-center pt-0.5">
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => {
-                  try {
-                    startPickerRef.current?.showPicker?.();
-                  } catch {
-                    startPickerRef.current?.focus();
-                  }
-                }}
-                className="w-full h-8 px-2 rounded-lg border border-[#E5EAE3] bg-white text-[11px] font-medium text-[#161F18] hover:bg-[#F9FAF8] flex items-center justify-center transition-colors shadow-2xs truncate select-none"
-              >
-                {formatDisplayDate(filters.startDate, '1 Nov 2026')}
-              </button>
-              <input
-                ref={startPickerRef}
-                type="date"
-                value={filters.startDate}
-                onChange={(e) =>
-                  onFilterChange((prev) => ({
-                    ...prev,
-                    startDate: e.target.value,
-                    datePreset: 'custom',
-                  }))
-                }
-                className="sr-only"
-                tabIndex={-1}
-              />
-            </div>
-
-            <span className="text-[#8B968D] text-xs px-0.5 select-none text-center">→</span>
-
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => {
-                  try {
-                    endPickerRef.current?.showPicker?.();
-                  } catch {
-                    endPickerRef.current?.focus();
-                  }
-                }}
-                className="w-full h-8 px-2 rounded-lg border border-[#E5EAE3] bg-white text-[11px] font-medium text-[#161F18] hover:bg-[#F9FAF8] flex items-center justify-center transition-colors shadow-2xs truncate select-none"
-              >
-                {formatDisplayDate(filters.endDate, '30 Nov 2026')}
-              </button>
-              <input
-                ref={endPickerRef}
-                type="date"
-                value={filters.endDate}
-                onChange={(e) =>
-                  onFilterChange((prev) => ({
-                    ...prev,
-                    endDate: e.target.value,
-                    datePreset: 'custom',
-                  }))
-                }
-                className="sr-only"
-                tabIndex={-1}
-              />
-            </div>
-          </div>
         </div>
 
         {/* Transaction Type Checkboxes */}

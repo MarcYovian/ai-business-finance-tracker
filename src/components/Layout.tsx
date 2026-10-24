@@ -1,10 +1,8 @@
 import { ReactNode, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
 import {
-  Menu,
   LayoutDashboard,
   WalletCards,
   Receipt,
@@ -12,16 +10,13 @@ import {
   Bot,
   Settings,
   LogOut,
-  Bell,
-  Search,
-  Plus,
-  Zap,
   Tags,
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { FEATURES } from '@/config/features';
+import { Header } from '@/components/Header';
 
 interface LayoutProps {
   children: ReactNode;
@@ -209,22 +204,6 @@ const SidebarContent = ({ onLinkClick }: { onLinkClick?: () => void }) => {
 export const Layout = ({ children }: LayoutProps) => {
   const isMobile = useIsMobile();
   const [isSheetOpen, setSheetOpen] = useState(false);
-  const { user } = useAuth();
-  const navigate = useNavigate();
-
-  const userDisplayName = user?.email ? user.email.split('@')[0] : 'Arya Danuarta';
-  const userFormattedName =
-    userDisplayName.charAt(0).toUpperCase() + userDisplayName.slice(1);
-  const userEmail = user?.email || 'm.danuarta@finantika.com';
-  const userInitials = userFormattedName.slice(0, 2).toUpperCase();
-
-  const handleAddTransaction = () => {
-    navigate('/transactions');
-  };
-
-  const handleOpenSettings = () => {
-    navigate('/settings');
-  };
 
   if (isMobile === undefined) {
     return null;
@@ -237,89 +216,17 @@ export const Layout = ({ children }: LayoutProps) => {
         <SidebarContent />
       </aside>
 
+      {/* Mobile Drawer (Controlled by isSheetOpen) */}
+      <Sheet open={isSheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent side="left" className="w-[240px] p-0 bg-white">
+          <SidebarContent onLinkClick={() => setSheetOpen(false)} />
+        </SheetContent>
+      </Sheet>
+
       {/* Main Content Column */}
       <div className="flex-1 flex flex-col min-w-0 bg-[#F5F6F3] min-h-screen">
         {/* Top Header Bar */}
-        <header className="h-16 px-4 sm:px-7 flex items-center justify-between border-b border-[#E7EBE4] bg-[#F5F6F3] shrink-0 sticky top-0 z-20">
-          {/* Left: Mobile hamburger or Search Bar */}
-          <div className="flex items-center gap-3">
-            {/* Mobile Drawer Trigger */}
-            <div className="md:hidden">
-              <Sheet open={isSheetOpen} onOpenChange={setSheetOpen}>
-                <SheetTrigger asChild>
-                  <Button variant="ghost" size="icon" className="w-9 h-9 rounded-xl bg-white border border-[#E2E6DF]">
-                    <Menu className="h-5 w-5 text-[#172019]" />
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="left" className="w-[240px] p-0 bg-white">
-                  <SidebarContent onLinkClick={() => setSheetOpen(false)} />
-                </SheetContent>
-              </Sheet>
-            </div>
-
-            {/* Search Bar matching ACRU */}
-            <div className="relative w-44 sm:w-72 lg:w-80">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9AA59C]" />
-              <input
-                type="text"
-                placeholder="Pencarian cepat..."
-                className="w-full h-9 pl-9 pr-4 rounded-xl bg-white border border-[#E3E8E0] text-[13px] text-[#172019] placeholder:text-[#9AA59C] focus:outline-none focus:border-[#8DC53E] focus:ring-1 focus:ring-[#8DC53E] transition-all"
-              />
-            </div>
-          </div>
-
-          {/* Right: Header Actions matching ACRU */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Notification Bell with red dot */}
-            <button
-              type="button"
-              className="w-9 h-9 rounded-xl bg-white border border-[#E2E6DF] flex items-center justify-center text-[#556057] hover:text-[#172019] hover:bg-[#F9FAF8] transition-colors relative"
-              title="Notifikasi"
-            >
-              <Bell className="h-4 w-4" />
-              <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-[#DE4436] rounded-full" />
-            </button>
-
-            {/* Settings Gear Button */}
-            <button
-              type="button"
-              onClick={handleOpenSettings}
-              className="w-9 h-9 rounded-xl bg-white border border-[#E2E6DF] flex items-center justify-center text-[#556057] hover:text-[#172019] hover:bg-[#F9FAF8] transition-colors"
-              title="Pengaturan"
-            >
-              <Settings className="h-4 w-4" />
-            </button>
-
-            {/* User Profile Pill */}
-            <div
-              onClick={handleOpenSettings}
-              className="flex items-center gap-2.5 px-2 sm:px-2.5 py-1.5 rounded-xl bg-white border border-[#E2E6DF] cursor-pointer hover:bg-[#F9FAF8] transition-colors"
-            >
-              <div className="w-7 h-7 rounded-full bg-[#E2ED7C] text-[#233319] flex items-center justify-center font-bold text-[11px] shrink-0">
-                {userInitials}
-              </div>
-              <div className="hidden sm:flex flex-col text-left">
-                <span className="text-[12px] font-bold text-[#172019] leading-tight truncate max-w-[120px]">
-                  {userFormattedName}
-                </span>
-                <span className="text-[10px] text-[#869288] leading-tight truncate max-w-[120px]">
-                  {userEmail}
-                </span>
-              </div>
-            </div>
-
-            {/* Tambah Transaksi CTA Button */}
-            <button
-              type="button"
-              onClick={handleAddTransaction}
-              className="flex items-center gap-1.5 h-9 px-3 sm:px-3.5 rounded-xl bg-white border border-[#18211A] text-[#18211A] hover:bg-[#18211A] hover:text-white font-semibold text-[12px] transition-all shadow-sm"
-            >
-              <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">Tambah Transaksi</span>
-              <span className="sm:hidden">Tambah</span>
-            </button>
-          </div>
-        </header>
+        <Header onMobileMenuClick={() => setSheetOpen(true)} />
 
         {/* Main Content Area */}
         <main className="flex-1 overflow-y-auto">

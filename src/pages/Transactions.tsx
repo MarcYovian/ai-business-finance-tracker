@@ -92,11 +92,26 @@ export default function Transactions() {
     pageSize: 10,
   });
 
+  const todayStr = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }, []);
+
+  const firstDayOfMonthStr = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    return `${y}-${m}-01`;
+  }, []);
+
   // Analytics hook
   const analytics = useTransactionsAnalytics({
     transactions,
-    startDate: appliedFilters.startDate || '2026-11-01',
-    endDate: appliedFilters.endDate || '2026-11-30',
+    startDate: appliedFilters.startDate || firstDayOfMonthStr,
+    endDate: appliedFilters.endDate || todayStr,
   });
 
   // Calculate active filters count
@@ -279,7 +294,12 @@ export default function Transactions() {
               activeTab={activeTab}
               onTabChange={setActiveTab}
               dateRangeLabel={dateRangeLabel}
-              onDateRangeClick={handleToggleFilter}
+              startDate={appliedFilters.startDate}
+              endDate={appliedFilters.endDate}
+              datePreset={appliedFilters.datePreset}
+              onDateRangeChange={(startDate, endDate, preset) => {
+                setDateRange(startDate, endDate, preset);
+              }}
               onToggleFilter={handleToggleFilter}
               isFilterOpen={isFilterOpen}
               activeFilterCount={activeFilterCount}
@@ -327,7 +347,7 @@ export default function Transactions() {
                   Filter Transactions
                 </DialogTitle>
                 <DialogDescription className="text-xs text-[#737E75] mt-0.5">
-                  Filter transactions by date range, type, category, account, or amount.
+                  Filter transactions by type, category, account, or amount.
                 </DialogDescription>
               </div>
             </div>
