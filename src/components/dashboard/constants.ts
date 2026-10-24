@@ -67,5 +67,5 @@ export const PERIOD_LABELS: Record<PeriodType, string> = {
   custom: 'Rentang Kustom',
 };
 
-export const DEFAULT_MONTHLY_BUDGET_LIMIT = 5000000;
+export const DEFAULT_MONTHLY_BUDGET_LIMIT = 0;
 export const DEFAULT_CASH_RESERVE_TARGET = 10000000;

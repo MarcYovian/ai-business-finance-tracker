@@ -564,6 +564,42 @@ export const budgetStorage = {
 
     return data || [];
   },
+
+  getBudgetsWithItems: async (userId: string) => {
+    if (!userId) return [];
+    try {
+      const { data, error } = await supabase
+        .from("budgets")
+        .select(`
+          id,
+          user_id,
+          name,
+          start_date,
+          end_date,
+          total_limit,
+          is_active,
+          created_at,
+          budget_items (
+            id,
+            planned_amount
+          )
+        `)
+        .eq("user_id", userId)
+        .order("start_date", { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    } catch (err) {
+      console.warn("Falling back to query without budget_items join:", err);
+      const { data, error } = await supabase
+        .from("budgets")
+        .select("id, user_id, name, start_date, end_date, total_limit, is_active, created_at")
+        .eq("user_id", userId)
+        .order("start_date", { ascending: false });
+      if (error) throw error;
+      return (data || []).map((b) => ({ ...b, budget_items: [] }));
+    }
+  },
 };
 
 // API Key and AI Provider operations
