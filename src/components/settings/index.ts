@@ -27,6 +27,7 @@ export { CurrencyRegionSection } from './sections/CurrencyRegionSection';
 export { NotificationsSection } from './sections/NotificationsSection';
 export { DataManagementSection } from './sections/DataManagementSection';
 export { SecuritySection } from './sections/SecuritySection';
+export { McpApiSection } from './sections/McpApiSection';
 
 // Dialogs
 export { ChangePasswordDialog } from './dialogs/ChangePasswordDialog';

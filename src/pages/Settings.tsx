@@ -10,6 +10,7 @@ import {
   NotificationsSection,
   DataManagementSection,
   SecuritySection,
+  McpApiSection,
 } from '@/components/settings';
 import { Card } from '@/components/ui/card';
 import { ChevronRight, Sparkles } from 'lucide-react';
@@ -39,6 +40,7 @@ export default function Settings() {
       'notifications',
       'data-management',
       'security',
+      'mcp-api',
     ];
     return validIds.includes(currentTab) ? currentTab : 'profile';
   });
@@ -85,6 +87,8 @@ export default function Settings() {
         return <DataManagementSection />;
       case 'security':
         return <SecuritySection />;
+      case 'mcp-api':
+        return <McpApiSection />;
       default:
         return <ProfileSection />;
     }

@@ -7,7 +7,8 @@ export type SettingsSectionId =
   | 'currency-region'
   | 'notifications'
   | 'data-management'
-  | 'security';
+  | 'security'
+  | 'mcp-api';
 
 export interface SettingsMenuItem {
   id: SettingsSectionId;

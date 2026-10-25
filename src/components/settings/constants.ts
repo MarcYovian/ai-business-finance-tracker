@@ -5,6 +5,7 @@ import {
   Bell,
   Database,
   ShieldCheck,
+  Bot,
 } from 'lucide-react';
 import { SettingsMenuItem } from './types';
 
@@ -44,6 +45,12 @@ export const SETTINGS_MENU_ITEMS: SettingsMenuItem[] = [
     label: 'Security',
     description: 'Password and security settings',
     icon: ShieldCheck,
+  },
+  {
+    id: 'mcp-api',
+    label: 'MCP & API Keys',
+    description: 'Connect AI Assistants (Claude, ChatGPT, etc.)',
+    icon: Bot,
   },
 ];
 
