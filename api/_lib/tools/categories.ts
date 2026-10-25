@@ -12,10 +12,11 @@ export const listCategoriesSchema = z.object({
 export async function handleListCategories(
   supabase: SupabaseClient,
   userId: string,
-  args: z.infer<typeof listCategoriesSchema>
+  args: z.infer<typeof listCategoriesSchema>,
+  keyHash?: string
 ) {
   try {
-    const categories = await listCategories(supabase, userId, args.type);
+    const categories = await listCategories(supabase, userId, args.type, keyHash);
 
     if (categories.length === 0) {
       return {

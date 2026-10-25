@@ -37,40 +37,24 @@ export interface UpdateTransactionInput {
 export async function listTransactions(
   supabase: SupabaseClient,
   userId: string,
-  filter: ListTransactionsFilter = {}
+  filter: ListTransactionsFilter = {},
+  keyHash?: string
 ): Promise<TransactionDTO[]> {
-  let query = supabase
-    .from("transactions")
-    .select(`
-      id,
-      description,
-      amount,
-      type,
-      transaction_date,
-      created_at,
-      user_id,
-      category_id,
-      source_fund_id,
-      destination_fund_id,
-      notes,
-      status,
-      parent_transaction_id
-    `)
-    .eq("user_id", userId)
-    .order("transaction_date", { ascending: false });
+  const { data, error } = await supabase.rpc("mcp_list_transactions", {
+    p_user_id: userId,
+    p_key_hash: keyHash || null,
+    p_type: filter.type || null,
+    p_start_date: filter.startDate || null,
+    p_end_date: filter.endDate || null,
+    p_category_id: filter.categoryId || null,
+    p_limit: filter.limit || 50,
+  });
 
-  if (filter.type) query = query.eq("type", filter.type);
-  if (filter.categoryId) query = query.eq("category_id", filter.categoryId);
-  if (filter.startDate) query = query.gte("transaction_date", filter.startDate);
-  if (filter.endDate) query = query.lte("transaction_date", filter.endDate);
-  query = query.limit(filter.limit || 50);
-
-  const { data, error } = await query;
   if (error) {
     throw new Error(`Failed to list transactions: ${error.message}`);
   }
 
-  return (data || []).map((t) => ({
+  return (data || []).map((t: any) => ({
     id: t.id,
     description: t.description,
     amount: (t.amount || 0) / 100, // Cents to Rupiah
@@ -90,20 +74,21 @@ export async function listTransactions(
 export async function createTransaction(
   supabase: SupabaseClient,
   userId: string,
-  input: CreateTransactionInput
+  input: CreateTransactionInput,
+  keyHash?: string
 ): Promise<TransactionDTO> {
   const amountInCents = Math.round(input.amount * 100);
   const feeInCents = input.fee ? Math.round(input.fee * 100) : 0;
   const transactionDate = input.transactionDate || new Date().toISOString();
 
-  // Pre-validate balance for expense / transfer
+  // Pre-validate balance for expense / transfer using secure RPC
   if ((input.type === "expense" || input.type === "transfer") && input.sourceFundId) {
-    const { data: sourceFund, error: fundError } = await supabase
-      .from("fund_sources")
-      .select("name, balance")
-      .eq("id", input.sourceFundId)
-      .eq("user_id", userId)
-      .single();
+    const { data: sourceFunds, error: fundError } = await supabase.rpc("mcp_get_fund_source", {
+      p_id: input.sourceFundId,
+      p_user_id: userId,
+      p_key_hash: keyHash || null,
+    });
+    const sourceFund = sourceFunds?.[0];
 
     if (fundError || !sourceFund) {
       throw new Error("Akun sumber dana tidak ditemukan atau Anda tidak memiliki akses.");
@@ -158,15 +143,16 @@ export async function createTransaction(
 export async function updateTransaction(
   supabase: SupabaseClient,
   userId: string,
-  input: UpdateTransactionInput
+  input: UpdateTransactionInput,
+  keyHash?: string
 ): Promise<void> {
-  // Fetch existing transaction
-  const { data: currentTx, error: fetchError } = await supabase
-    .from("transactions")
-    .select("*")
-    .eq("id", input.id)
-    .eq("user_id", userId)
-    .single();
+  // Fetch existing transaction using secure RPC
+  const { data: currentTxs, error: fetchError } = await supabase.rpc("mcp_get_transaction", {
+    p_id: input.id,
+    p_user_id: userId,
+    p_key_hash: keyHash || null,
+  });
+  const currentTx = currentTxs?.[0];
 
   if (fetchError || !currentTx) {
     throw new Error("Transaksi tidak ditemukan atau Anda tidak memiliki akses.");

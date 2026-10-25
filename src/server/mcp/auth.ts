@@ -16,6 +16,7 @@ export interface AuthenticatedContext {
   userId: string;
   supabase: SupabaseClient;
   authMethod: "api_key" | "jwt";
+  keyHash?: string;
 }
 
 /**
@@ -85,6 +86,7 @@ export async function authenticateMcpRequest(
       userId: userId as string,
       supabase: anonClient,
       authMethod: "api_key",
+      keyHash,
     };
   }
 

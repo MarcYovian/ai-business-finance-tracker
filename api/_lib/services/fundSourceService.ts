@@ -3,13 +3,13 @@ import { FundSourceDTO } from "../types.js";
 
 export async function listFundSources(
   supabase: SupabaseClient,
-  userId: string
+  userId: string,
+  keyHash?: string
 ): Promise<FundSourceDTO[]> {
-  const { data, error } = await supabase
-    .from("fund_sources")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: true });
+  const { data, error } = await supabase.rpc("mcp_list_fund_sources", {
+    p_user_id: userId,
+    p_key_hash: keyHash || null,
+  });
 
   if (error) {
     throw new Error(`Failed to list fund sources: ${error.message}`);

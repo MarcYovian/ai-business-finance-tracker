@@ -24,7 +24,8 @@ import {
 export function registerAllTools(
   server: McpServer,
   supabase: SupabaseClient,
-  userId: string
+  userId: string,
+  keyHash?: string
 ) {
   // 1. Transactions: List
   server.registerTool(
@@ -34,7 +35,7 @@ export function registerAllTools(
         "Melihat riwayat transaksi keuangan bisnis pengguna. Mendukung filter rentang tanggal, tipe (income, expense, transfer), dan kategori.",
       inputSchema: listTransactionsSchema,
     },
-    async (args) => handleListTransactions(supabase, userId, args)
+    async (args) => handleListTransactions(supabase, userId, args, keyHash)
   );
 
   // 2. Transactions: Create
@@ -45,7 +46,7 @@ export function registerAllTools(
         "Mencatat transaksi baru (pengeluaran, pemasukan, atau transfer). Otomatis memperbarui saldo akun kas/bank melalui PostgreSQL RPC function yang aman.",
       inputSchema: createTransactionSchema,
     },
-    async (args) => handleCreateTransaction(supabase, userId, args)
+    async (args) => handleCreateTransaction(supabase, userId, args, keyHash)
   );
 
   // 3. Transactions: Update
@@ -56,7 +57,7 @@ export function registerAllTools(
         "Memperbarui detail transaksi yang sudah ada (nominal, deskripsi, tanggal, atau kategori) dan merekonsiliasi saldo rekening.",
       inputSchema: updateTransactionSchema,
     },
-    async (args) => handleUpdateTransaction(supabase, userId, args)
+    async (args) => handleUpdateTransaction(supabase, userId, args, keyHash)
   );
 
   // 4. Fund Sources / Accounts: List
@@ -67,7 +68,7 @@ export function registerAllTools(
         "Mendapatkan daftar seluruh akun sumber dana (rekening bank, kas tunai, dompet digital, kartu kredit) beserta saldo saat ini.",
       inputSchema: listFundSourcesSchema,
     },
-    async () => handleListFundSources(supabase, userId)
+    async () => handleListFundSources(supabase, userId, keyHash)
   );
 
   // 5. Categories: List
@@ -78,6 +79,6 @@ export function registerAllTools(
         "Mendapatkan daftar kategori pemasukan dan pengeluaran beserta subkategorinya untuk membantu pengkategorian transaksi yang tepat.",
       inputSchema: listCategoriesSchema,
     },
-    async (args) => handleListCategories(supabase, userId, args)
+    async (args) => handleListCategories(supabase, userId, args, keyHash)
   );
 }

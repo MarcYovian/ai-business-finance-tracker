@@ -4,20 +4,15 @@ import { CategoryDTO } from "../types.js";
 export async function listCategories(
   supabase: SupabaseClient,
   userId: string,
-  type?: "income" | "expense"
+  type?: "income" | "expense",
+  keyHash?: string
 ): Promise<CategoryDTO[]> {
-  let query = supabase
-    .from("categories")
-    .select("*")
-    .eq("user_id", userId);
+  const { data, error } = await supabase.rpc("mcp_list_categories", {
+    p_user_id: userId,
+    p_key_hash: keyHash || null,
+    p_type: type || null,
+  });
 
-  if (type) {
-    query = query.eq("type", type);
-  }
-
-  query = query.order("name", { ascending: true });
-
-  const { data, error } = await query;
   if (error) {
     throw new Error(`Failed to list categories: ${error.message}`);
   }

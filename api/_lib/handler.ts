@@ -53,7 +53,7 @@ export async function handleMcpRequest(req: Request): Promise<Response> {
   });
 
   // 4. Initialize User-Scoped McpServer and connect
-  const server = createFinanceMcpServer(authContext.userId, authContext.supabase);
+  const server = createFinanceMcpServer(authContext.userId, authContext.supabase, authContext.keyHash);
   await server.connect(transport);
 
   // 5. Handle Request

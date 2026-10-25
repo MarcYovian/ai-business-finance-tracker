@@ -123,10 +123,11 @@ export const updateTransactionSchema = z.object({
 export async function handleListTransactions(
   supabase: SupabaseClient,
   userId: string,
-  args: z.infer<typeof listTransactionsSchema>
+  args: z.infer<typeof listTransactionsSchema>,
+  keyHash?: string
 ) {
   try {
-    const transactions = await listTransactions(supabase, userId, args);
+    const transactions = await listTransactions(supabase, userId, args, keyHash);
 
     if (transactions.length === 0) {
       return {
@@ -164,7 +165,8 @@ export async function handleListTransactions(
 export async function handleCreateTransaction(
   supabase: SupabaseClient,
   userId: string,
-  args: z.infer<typeof createTransactionSchema>
+  args: z.infer<typeof createTransactionSchema>,
+  keyHash?: string
 ) {
   try {
     if (args.type === "expense" && !args.sourceFundId) {
@@ -203,7 +205,7 @@ export async function handleCreateTransaction(
       };
     }
 
-    const newTx = await createTransaction(supabase, userId, args as unknown as CreateTransactionInput);
+    const newTx = await createTransaction(supabase, userId, args as unknown as CreateTransactionInput, keyHash);
 
     return {
       content: [
@@ -224,10 +226,11 @@ export async function handleCreateTransaction(
 export async function handleUpdateTransaction(
   supabase: SupabaseClient,
   userId: string,
-  args: z.infer<typeof updateTransactionSchema>
+  args: z.infer<typeof updateTransactionSchema>,
+  keyHash?: string
 ) {
   try {
-    await updateTransaction(supabase, userId, args as unknown as UpdateTransactionInput);
+    await updateTransaction(supabase, userId, args as unknown as UpdateTransactionInput, keyHash);
 
     return {
       content: [

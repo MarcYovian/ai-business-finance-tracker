@@ -6,10 +6,11 @@ export const listFundSourcesSchema = z.object({});
 
 export async function handleListFundSources(
   supabase: SupabaseClient,
-  userId: string
+  userId: string,
+  keyHash?: string
 ) {
   try {
-    const fundSources = await listFundSources(supabase, userId);
+    const fundSources = await listFundSources(supabase, userId, keyHash);
 
     if (fundSources.length === 0) {
       return {

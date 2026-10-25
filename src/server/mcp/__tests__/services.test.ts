@@ -38,13 +38,7 @@ describe("MCP Services", () => {
           },
         ];
 
-        const queryBuilder: any = {
-          select: vi.fn().mockReturnThis(),
-          eq: vi.fn().mockReturnThis(),
-          order: vi.fn().mockReturnThis(),
-          limit: vi.fn().mockResolvedValue({ data: mockRawTransactions, error: null }),
-        };
-        mockSupabase.from.mockReturnValue(queryBuilder);
+        mockSupabase.rpc.mockResolvedValue({ data: mockRawTransactions, error: null });
 
         const result = await listTransactions(mockSupabase, "user-123", { limit: 10 });
 
@@ -52,16 +46,11 @@ describe("MCP Services", () => {
         expect(result[0].id).toBe("tx-1");
         expect(result[0].amount).toBe(50000); // Converted from 5000000 cents
         expect(result[0].type).toBe("income");
+        expect(mockSupabase.rpc).toHaveBeenCalledWith("mcp_list_transactions", expect.any(Object));
       });
 
       it("should throw error when database query fails", async () => {
-        const queryBuilder: any = {
-          select: vi.fn().mockReturnThis(),
-          eq: vi.fn().mockReturnThis(),
-          order: vi.fn().mockReturnThis(),
-          limit: vi.fn().mockResolvedValue({ data: null, error: { message: "DB Error" } }),
-        };
-        mockSupabase.from.mockReturnValue(queryBuilder);
+        mockSupabase.rpc.mockResolvedValue({ data: null, error: { message: "DB Error" } });
 
         await expect(listTransactions(mockSupabase, "user-123")).rejects.toThrow(
           "Failed to list transactions: DB Error"
@@ -71,16 +60,15 @@ describe("MCP Services", () => {
 
     describe("createTransaction", () => {
       it("should reject expense when source fund balance is insufficient", async () => {
-        // Mock fund sources balance check: balance = Rp20.000 (2,000,000 cents)
-        const fundQueryBuilder: any = {
-          select: vi.fn().mockReturnThis(),
-          eq: vi.fn().mockReturnThis(),
-          single: vi.fn().mockResolvedValue({
-            data: { name: "Kas Kecil", balance: 2000000 },
-            error: null,
-          }),
-        };
-        mockSupabase.from.mockReturnValue(fundQueryBuilder);
+        mockSupabase.rpc.mockImplementation(async (fn: string) => {
+          if (fn === "mcp_get_fund_source") {
+            return {
+              data: [{ name: "Kas Kecil", balance: 2000000 }], // 20,000 IDR in cents
+              error: null,
+            };
+          }
+          return { data: null, error: null };
+        });
 
         // Attempting to spend Rp50.000
         await expect(
@@ -94,39 +82,38 @@ describe("MCP Services", () => {
       });
 
       it("should convert amount to cents and invoke RPC when balance is sufficient", async () => {
-        // Mock sufficient balance: balance = Rp100.000 (10,000,000 cents)
-        const fundQueryBuilder: any = {
-          select: vi.fn().mockReturnThis(),
-          eq: vi.fn().mockReturnThis(),
-          single: vi.fn().mockResolvedValue({
-            data: { name: "Rekening BCA", balance: 10000000 },
-            error: null,
-          }),
-        };
-        mockSupabase.from.mockReturnValue(fundQueryBuilder);
-
-        // Mock RPC call
-        const rpcChain: any = {
-          select: vi.fn().mockReturnThis(),
-          single: vi.fn().mockResolvedValue({
-            data: {
-              id: "new-tx-uuid",
-              description: "Belanja ATK",
-              amount: 5000000,
-              type: "expense",
-              transaction_date: "2026-10-25T11:00:00Z",
-              created_at: "2026-10-25T11:00:00Z",
-              user_id: "user-123",
-              category_id: null,
-              source_fund_id: "fund-bca",
-              destination_fund_id: null,
-              notes: null,
-              status: "completed",
-            },
-            error: null,
-          }),
-        };
-        mockSupabase.rpc.mockReturnValue(rpcChain);
+        mockSupabase.rpc.mockImplementation((fn: string) => {
+          if (fn === "mcp_get_fund_source") {
+            return Promise.resolve({
+              data: [{ name: "Rekening BCA", balance: 10000000 }], // 100,000 IDR in cents
+              error: null,
+            });
+          }
+          if (fn === "create_transaction_and_update_balance") {
+            return {
+              select: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: {
+                    id: "new-tx-uuid",
+                    description: "Belanja ATK",
+                    amount: 5000000,
+                    type: "expense",
+                    transaction_date: "2026-10-25T11:00:00Z",
+                    created_at: "2026-10-25T11:00:00Z",
+                    user_id: "user-123",
+                    category_id: null,
+                    source_fund_id: "fund-bca",
+                    destination_fund_id: null,
+                    notes: null,
+                    status: "completed",
+                  },
+                  error: null,
+                }),
+              }),
+            };
+          }
+          return Promise.resolve({ data: null, error: null });
+        });
 
         const result = await createTransaction(mockSupabase, "user-123", {
           description: "Belanja ATK",
@@ -152,28 +139,30 @@ describe("MCP Services", () => {
 
     describe("updateTransaction", () => {
       it("should verify existing transaction and call update RPC", async () => {
-        // Mock get existing transaction
-        const txQueryBuilder: any = {
-          select: vi.fn().mockReturnThis(),
-          eq: vi.fn().mockReturnThis(),
-          single: vi.fn().mockResolvedValue({
-            data: {
-              id: "tx-exist",
-              description: "Lama",
-              amount: 2000000,
-              type: "expense",
-              transaction_date: "2026-10-20T00:00:00Z",
-              category_id: null,
-              source_fund_id: "fund-1",
-              destination_fund_id: null,
-              fee: 0,
-            },
-            error: null,
-          }),
-        };
-        mockSupabase.from.mockReturnValue(txQueryBuilder);
-
-        mockSupabase.rpc.mockResolvedValue({ error: null });
+        mockSupabase.rpc.mockImplementation(async (fn: string) => {
+          if (fn === "mcp_get_transaction") {
+            return {
+              data: [
+                {
+                  id: "tx-exist",
+                  description: "Lama",
+                  amount: 2000000,
+                  type: "expense",
+                  transaction_date: "2026-10-20T00:00:00Z",
+                  category_id: null,
+                  source_fund_id: "fund-1",
+                  destination_fund_id: null,
+                  fee: 0,
+                },
+              ],
+              error: null,
+            };
+          }
+          if (fn === "update_transaction_and_update_balance") {
+            return { error: null };
+          }
+          return { data: null, error: null };
+        });
 
         await updateTransaction(mockSupabase, "user-123", {
           id: "tx-exist",
@@ -210,12 +199,7 @@ describe("MCP Services", () => {
         },
       ];
 
-      const queryBuilder: any = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        order: vi.fn().mockResolvedValue({ data: mockRawFunds, error: null }),
-      };
-      mockSupabase.from.mockReturnValue(queryBuilder);
+      mockSupabase.rpc.mockResolvedValue({ data: mockRawFunds, error: null });
 
       const result = await listFundSources(mockSupabase, "user-123");
 
@@ -223,6 +207,7 @@ describe("MCP Services", () => {
       expect(result[0].name).toBe("Bank Mandiri");
       expect(result[0].balance).toBe(1500000); // in Rupiah
       expect(result[0].isActive).toBe(true);
+      expect(mockSupabase.rpc).toHaveBeenCalledWith("mcp_list_fund_sources", expect.any(Object));
     });
   });
 
@@ -244,18 +229,14 @@ describe("MCP Services", () => {
         },
       ];
 
-      const queryBuilder: any = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        order: vi.fn().mockResolvedValue({ data: mockRawCategories, error: null }),
-      };
-      mockSupabase.from.mockReturnValue(queryBuilder);
+      mockSupabase.rpc.mockResolvedValue({ data: mockRawCategories, error: null });
 
       const result = await listCategories(mockSupabase, "user-123", "expense");
 
       expect(result).toHaveLength(1);
       expect(result[0].name).toBe("Operasional");
       expect(result[0].type).toBe("expense");
+      expect(mockSupabase.rpc).toHaveBeenCalledWith("mcp_list_categories", expect.any(Object));
     });
   });
 });
