@@ -14,8 +14,17 @@ export const useAddFundSource = () => {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: ({ name, balance, userId }: { name: string; balance: number; userId: string }) =>
-      fundSourceStorage.create(name, balance, userId),
+    mutationFn: ({
+      name,
+      balance,
+      userId,
+      extra,
+    }: {
+      name: string;
+      balance: number;
+      userId: string;
+      extra?: Partial<FundSource>;
+    }) => fundSourceStorage.create(name, balance, userId, extra),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fundSources'] });
     },

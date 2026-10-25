@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mockDeep, mockReset } from 'vitest-mock-extended';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { storage, userStorage, categoryStorage, fundSourceStorage, transactionStorage, aiConfigStorage } from '@/lib/storage';
+import { storage, userStorage, categoryStorage, fundSourceStorage, transactionStorage, aiConfigStorage, financialGoalsStorage } from '@/lib/storage';
 
 // Mock the supabase client
 vi.mock('@/lib/supabase', () => {
@@ -57,7 +57,7 @@ describe('Storage', () => {
 
   describe('categoryStorage', () => {
     it('creates a category', async () => {
-      const mockCategory = { id: 'cat1', name: 'Food', user_id: 'user1', created_at: new Date().toISOString() };
+      const mockCategory = { id: 'cat1', name: 'Food', user_id: 'user1', type: 'expense', created_at: new Date().toISOString() };
       (supabase.from as any).mockReturnValue({
         insert: vi.fn().mockReturnValue({
           select: vi.fn().mockResolvedValue({ data: [mockCategory], error: null }),
@@ -73,16 +73,45 @@ describe('Storage', () => {
         type: 'expense',
         parentId: null,
         createdAt: mockCategory.created_at,
+        color: null,
+        icon: null,
+        description: null,
+        sort_order: null,
+        is_active: true,
       });
     });
 
     it('creates a subcategory', async () => {
-      const mockCategory = { id: 'cat2', name: 'Groceries', user_id: 'user1', created_at: new Date().toISOString(), parent_id: 'cat1' };
+      const mockCategory = { 
+        id: 'cat2', 
+        name: 'Groceries', 
+        user_id: 'user1', 
+        type: 'expense',
+        created_at: new Date().toISOString(), 
+        parent_id: 'cat1' 
+      };
       (supabase.from as any).mockReturnValue({
         insert: vi.fn().mockReturnValue({
           select: vi.fn().mockResolvedValue({ data: [mockCategory], error: null }),
         }),
       });
+
+      const category = await categoryStorage.create('Groceries', 'user1', 'expense', 'cat1');
+
+      expect(category).toEqual({
+        id: 'cat2',
+        name: 'Groceries',
+        userId: 'user1',
+        type: 'expense',
+        parentId: 'cat1',
+        createdAt: mockCategory.created_at,
+        color: null,
+        icon: null,
+        description: null,
+        sort_order: null,
+        is_active: true,
+      });
+    });
   });
 
   describe('fundSourceStorage', () => {
@@ -112,16 +141,25 @@ describe('Storage', () => {
         id: 't1',
         description: 'Lunch',
         amount: 50000,
-        type: 'expense',
+        type: 'expense' as const,
         transaction_date: new Date().toISOString(),
         user_id: 'user1',
         category_id: 'cat1',
-        fund_source_id: 'fs1',
+        source_fund_id: 'fs1',
+        destination_fund_id: null,
         created_at: new Date().toISOString(),
       };
       (supabase.from as any).mockReturnValue({
-        insert: vi.fn().mockReturnValue({
-          select: vi.fn().mockResolvedValue({ data: [mockTransaction], error: null }),
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({ data: { balance: 10000000 }, error: null }),
+          }),
+        }),
+      });
+
+      (supabase.rpc as any).mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({ data: mockTransaction, error: null }),
         }),
       });
 
@@ -143,7 +181,8 @@ describe('Storage', () => {
         transactionDate: mockTransaction.transaction_date,
         userId: 'user1',
         categoryId: 'cat1',
-        fundSourceId: 'fs1',
+        sourceFundId: 'fs1',
+        destinationFundId: null,
         createdAt: mockTransaction.created_at,
       });
     });
@@ -173,6 +212,91 @@ describe('Storage', () => {
 
       aiConfigStorage.setProvider('gemini');
       expect(aiConfigStorage.getActiveKey()).toBe('gemini-key');
+    });
+  });
+
+  describe('financialGoalsStorage', () => {
+    it('fetches goals and converts cents to whole rupiah', async () => {
+      const mockGoalsDb = [
+        {
+          id: 'goal-1',
+          user_id: 'user-1',
+          name: 'Dana Cadangan Kas',
+          description: 'Emergency reserve',
+          target_amount: 1000000000, // 10,000,000 in cents
+          current_amount: 500000000, // 5,000,000 in cents
+          category: 'savings',
+          target_date: '2026-12-31',
+          status: 'active',
+          priority: 10,
+          created_at: '2026-01-01T00:00:00Z',
+          updated_at: '2026-01-01T00:00:00Z',
+        },
+      ];
+
+      (supabase.from as any).mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            order: vi.fn().mockReturnValue({
+              order: vi.fn().mockResolvedValue({ data: mockGoalsDb, error: null }),
+            }),
+          }),
+        }),
+      });
+
+      const goals = await financialGoalsStorage.getAll('user-1');
+      expect(goals).toHaveLength(1);
+      expect(goals[0].target_amount).toBe(10000000);
+      expect(goals[0].current_amount).toBe(5000000);
+      expect(goals[0].name).toBe('Dana Cadangan Kas');
+    });
+
+    it('upserts a goal and converts whole rupiah to cents', async () => {
+      const upsertMock = vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({
+            data: {
+              id: 'goal-new',
+              user_id: 'user-1',
+              name: 'Investasi Mesin',
+              description: null,
+              target_amount: 5000000000, // 50m in cents
+              current_amount: 1000000000, // 10m in cents
+              category: 'investment',
+              target_date: '2027-01-01',
+              status: 'active',
+              priority: 0,
+              created_at: '2026-01-01T00:00:00Z',
+              updated_at: '2026-01-01T00:00:00Z',
+            },
+            error: null,
+          }),
+        }),
+      });
+
+      (supabase.from as any).mockReturnValue({
+        upsert: upsertMock,
+      });
+
+      const result = await financialGoalsStorage.upsert({
+        user_id: 'user-1',
+        name: 'Investasi Mesin',
+        target_amount: 50000000,
+        current_amount: 10000000,
+        category: 'investment',
+        target_date: '2027-01-01',
+        status: 'active',
+      });
+
+      expect(upsertMock).toHaveBeenCalledWith([
+        expect.objectContaining({
+          target_amount: 5000000000,
+          current_amount: 1000000000,
+          category: 'investment',
+        }),
+      ]);
+      expect(result.target_amount).toBe(50000000);
+      expect(result.current_amount).toBe(10000000);
     });
   });
 });

@@ -17,6 +17,21 @@ export const formatCurrency = (amountInCents: number): string => {
 };
 
 /**
+ * Formats an amount already in whole Indonesian Rupiah (without dividing by 100).
+ * e.g., 2306687 -> "Rp 2.306.687"
+ * @param amountInRupiah The whole rupiah amount
+ * @returns Formatted currency string
+ */
+export const formatRupiah = (amountInRupiah: number): string => {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amountInRupiah);
+};
+
+/**
  * Formats a value into a string with the IDR currency symbol, suitable for use in an input field.
  * e.g., 1500000 -> "Rp1.500.000"
  * @param value The value to format

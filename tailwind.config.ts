@@ -65,6 +65,38 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        acru: {
+          canvas: "#D5D8D3",
+          frame: "#F5F6F3",
+          surface: "#FFFFFF",
+          card: "#FFFFFF",
+          border: "#E5EAE3",
+          borderLight: "#E7EBE4",
+          borderFrame: "#E1E5DF",
+          ink: "#161F18",
+          inkSecondary: "#657267",
+          inkMuted: "#869288",
+          lime: {
+            DEFAULT: "#9CD447",
+            dark: "#8DC53E",
+            light: "#F0F6E6",
+            ink: "#233319",
+          },
+          peach: {
+            DEFAULT: "#F5A87B",
+            light: "#FDEFE8",
+          },
+          yellow: {
+            DEFAULT: "#F7D063",
+            soft: "#E2ED7C",
+          },
+          success: "#4A7C1E",
+          destructive: "#DE4436",
+        },
+      },
+      fontFamily: {
+        sans: ['"Plus Jakarta Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        numeric: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
       borderRadius: {
         lg: "var(--radius)",

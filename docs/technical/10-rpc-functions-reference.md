@@ -73,8 +73,8 @@ This document provides a detailed reference for the custom PostgreSQL Remote Pro
       WHERE id = p_destination_fund_id;
 
       IF p_fee > 0 THEN
-        INSERT INTO public.transactions (description, amount, type, transaction_date, user_id, category_id, source_fund_id)
-        VALUES ('Biaya admin untuk transfer', p_fee, 'expense', p_transaction_date, p_user_id, NULL, p_source_fund_id);
+        INSERT INTO public.transactions (description, amount, type, transaction_date, user_id, category_id, source_fund_id, parent_transaction_id)
+        VALUES ('Biaya admin untuk transfer', p_fee, 'expense', p_transaction_date, p_user_id, NULL, p_source_fund_id, new_transaction.id);
       END IF;
 
     END IF;

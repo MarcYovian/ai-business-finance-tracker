@@ -19,12 +19,29 @@ export const useAddCategory = () => {
       userId,
       type,
       parentId,
+      color,
+      icon,
+      description,
+      sort_order,
+      is_active,
     }: {
       name: string;
       userId: string;
       type: "income" | "expense";
       parentId?: string | null;
-    }) => categoryStorage.create(name, userId, type, parentId || null),
+      color?: string | null;
+      icon?: string | null;
+      description?: string | null;
+      sort_order?: number | null;
+      is_active?: boolean;
+    }) =>
+      categoryStorage.create(name, userId, type, parentId || null, {
+        color,
+        icon,
+        description,
+        sort_order,
+        is_active,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["categories"] });
     },
@@ -40,12 +57,32 @@ export const useUpdateCategory = () => {
       name,
       type,
       parentId,
+      color,
+      icon,
+      description,
+      sort_order,
+      is_active,
     }: {
       id: string;
-      name: string;
+      name?: string;
       type?: "income" | "expense";
       parentId?: string | null;
-    }) => categoryStorage.update(id, { name, type, parentId }),
+      color?: string | null;
+      icon?: string | null;
+      description?: string | null;
+      sort_order?: number | null;
+      is_active?: boolean;
+    }) =>
+      categoryStorage.update(id, {
+        name,
+        type,
+        parentId,
+        color,
+        icon,
+        description,
+        sort_order,
+        is_active,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["categories"] });
     },

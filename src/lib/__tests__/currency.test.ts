@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatCurrency, parseCurrency, extractCurrencyFromText } from '@/lib/currency';
+import { formatCurrency, formatRupiah, parseCurrency, extractCurrencyFromText } from '@/lib/currency';
 
 describe('Currency utilities (IDR)', () => {
   describe('formatCurrency', () => {
@@ -9,6 +9,16 @@ describe('Currency utilities (IDR)', () => {
       expect(formatCurrency(1000000)).toBe('Rp\u00A010.000');
       expect(formatCurrency(0)).toBe('Rp\u00A00');
       expect(formatCurrency(50000)).toBe('Rp\u00A0500');
+    });
+  });
+
+  describe('formatRupiah', () => {
+    it('formats whole Rupiah directly without cents conversion', () => {
+      expect(formatRupiah(2306687)).toBe('Rp\u00A02.306.687');
+      expect(formatRupiah(25441)).toBe('Rp\u00A025.441');
+      expect(formatRupiah(5000)).toBe('Rp\u00A05.000');
+      expect(formatRupiah(2337128)).toBe('Rp\u00A02.337.128');
+      expect(formatRupiah(0)).toBe('Rp\u00A00');
     });
   });
 
