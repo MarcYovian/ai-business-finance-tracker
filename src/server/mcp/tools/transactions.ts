@@ -4,6 +4,8 @@ import {
   listTransactions,
   createTransaction,
   updateTransaction,
+  type CreateTransactionInput,
+  type UpdateTransactionInput,
 } from "../services/transactionService.js";
 
 export const listTransactionsSchema = z.object({
@@ -201,7 +203,7 @@ export async function handleCreateTransaction(
       };
     }
 
-    const newTx = await createTransaction(supabase, userId, args);
+    const newTx = await createTransaction(supabase, userId, args as unknown as CreateTransactionInput);
 
     return {
       content: [
@@ -225,7 +227,7 @@ export async function handleUpdateTransaction(
   args: z.infer<typeof updateTransactionSchema>
 ) {
   try {
-    await updateTransaction(supabase, userId, args);
+    await updateTransaction(supabase, userId, args as unknown as UpdateTransactionInput);
 
     return {
       content: [

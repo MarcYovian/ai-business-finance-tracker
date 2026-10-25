@@ -34,7 +34,7 @@ function mcpDevServerPlugin(): Plugin {
               duplex: "half",
             });
 
-            const { handleMcpRequest } = await import("./src/server/mcp/handler");
+            const { handleMcpRequest } = await import("./api/_lib/handler.js");
             const webRes = await handleMcpRequest(webReq);
 
             res.statusCode = webRes.status;

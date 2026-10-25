@@ -1,4 +1,4 @@
-import { handleMcpRequest } from "../src/server/mcp/handler";
+import { handleMcpRequest } from "./_lib/handler.js";
 
 export const config = {
   maxDuration: 30,
