@@ -31,9 +31,20 @@ export interface UpsertBudgetDTO {
   }[];
 }
 
+export interface PreviousBudgetDTO {
+  budgetId: string;
+  name: string;
+  startDate: string;
+  monthLabel: string;
+  items: { category_id: string; amount: number }[];
+}
+
 export interface IBudgetService {
   getOrCreateForMonth(date?: Date | string): Promise<BudgetDTO>;
   getDetails(budgetId: string): Promise<BudgetItemDTO[]>;
+  getRawBudgetDetails(budgetId: string): Promise<any[]>;
   upsert(payload: UpsertBudgetDTO): Promise<BudgetDTO>;
   getHistory(limit?: number): Promise<BudgetDTO[]>;
+  getBudgetsWithItems(): Promise<any[]>;
+  getPreviousBudgetWithItems(monthInput?: string | Date): Promise<PreviousBudgetDTO | null>;
 }

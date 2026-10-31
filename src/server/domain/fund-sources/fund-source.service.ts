@@ -84,6 +84,7 @@ export class FundSourceDomainService implements IFundSourceService {
   async create(payload: CreateFundSourceDTO): Promise<FundSourceDTO> {
     const validated = createFundSourceSchema.parse(payload);
     const balanceInCents = Math.round(validated.balance * 100);
+    const dbType = validated.type === "e-wallet" ? "wallet" : validated.type;
 
     const { data, error } = await this.ctx.supabase
       .from("fund_sources")
@@ -91,7 +92,7 @@ export class FundSourceDomainService implements IFundSourceService {
         {
           user_id: this.ctx.userId,
           name: validated.name,
-          type: validated.type,
+          type: dbType,
           balance: balanceInCents,
           account_number: validated.accountNumber || null,
           account_holder_name: validated.accountHolderName || null,
@@ -131,7 +132,7 @@ export class FundSourceDomainService implements IFundSourceService {
 
     const updates: Record<string, any> = {};
     if (validated.name !== undefined) updates.name = validated.name;
-    if (validated.type !== undefined) updates.type = validated.type;
+    if (validated.type !== undefined) updates.type = validated.type === "e-wallet" ? "wallet" : validated.type;
     if (validated.accountNumber !== undefined) updates.account_number = validated.accountNumber;
     if (validated.accountHolderName !== undefined) updates.account_holder_name = validated.accountHolderName;
     if (validated.cardExpiry !== undefined) updates.card_expiry = validated.cardExpiry;

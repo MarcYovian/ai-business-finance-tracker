@@ -1,15 +1,66 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { mockDeep, mockReset } from 'vitest-mock-extended';
-import { SupabaseClient } from '@supabase/supabase-js';
-import { storage, userStorage, categoryStorage, fundSourceStorage, transactionStorage, aiConfigStorage, financialGoalsStorage } from '@/lib/storage';
+import {
+  storage,
+  userStorage,
+  categoryStorage,
+  fundSourceStorage,
+  transactionStorage,
+  aiConfigStorage,
+  financialGoalsStorage,
+} from '@/lib/storage';
+import { apiClient } from '@/lib/api-client';
 
-// Mock the supabase client
-vi.mock('@/lib/supabase', () => {
-  const supabase = mockDeep<SupabaseClient>();
-  return { supabase };
-});
-
-import { supabase } from '@/lib/supabase';
+// Mock the API client layer
+vi.mock('@/lib/api-client', () => ({
+  apiClient: {
+    categories: {
+      list: vi.fn(),
+      getById: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+    },
+    fundSources: {
+      list: vi.fn(),
+      getById: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+    },
+    transactions: {
+      list: vi.fn(),
+      getById: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      transfer: vi.fn(),
+    },
+    budgets: {
+      getCurrent: vi.fn(),
+      getDetails: vi.fn(),
+      getHistory: vi.fn(),
+      getWithItems: vi.fn(),
+      getPrevious: vi.fn(),
+      upsert: vi.fn(),
+    },
+    beneficiaries: {
+      list: vi.fn(),
+      getById: vi.fn(),
+      create: vi.fn(),
+      delete: vi.fn(),
+    },
+    financialGoals: {
+      list: vi.fn(),
+      getById: vi.fn(),
+      upsert: vi.fn(),
+      delete: vi.fn(),
+    },
+    ai: {
+      chat: vi.fn(),
+      insights: vi.fn(),
+    },
+  },
+}));
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -30,41 +81,41 @@ const localStorageMock = (() => {
 
 Object.defineProperty(window, 'localStorage', { value: localStorageMock });
 
-describe('Storage', () => {
+describe('Storage (REST API Bridge)', () => {
   beforeEach(() => {
-    mockReset(supabase);
+    vi.clearAllMocks();
     localStorageMock.clear();
   });
 
-  describe('userStorage', () => {
-    it('gets current user', async () => {
-      const mockUser = {
-        id: '123',
-        email: 'test@example.com',
-        created_at: new Date().toISOString(),
-      };
-      (supabase.auth.getUser as any).mockResolvedValue({ data: { user: mockUser } });
-
-      const user = await userStorage.getCurrentUser();
-
-      expect(user).toEqual({
-        id: '123',
-        email: 'test@example.com',
-        createdAt: mockUser.created_at,
-      });
-    });
-  });
-
   describe('categoryStorage', () => {
-    it('creates a category', async () => {
-      const mockCategory = { id: 'cat1', name: 'Food', user_id: 'user1', type: 'expense', created_at: new Date().toISOString() };
-      (supabase.from as any).mockReturnValue({
-        insert: vi.fn().mockReturnValue({
-          select: vi.fn().mockResolvedValue({ data: [mockCategory], error: null }),
-        }),
-      });
+    it('creates a category via apiClient', async () => {
+      const mockCategory = {
+        id: 'cat1',
+        name: 'Food',
+        userId: 'user1',
+        type: 'expense' as const,
+        parentId: null,
+        color: null,
+        icon: null,
+        description: null,
+        sortOrder: null,
+        isActive: true,
+        createdAt: new Date().toISOString(),
+      };
+      (apiClient.categories.create as any).mockResolvedValue(mockCategory);
 
       const category = await categoryStorage.create('Food', 'user1', 'expense', null);
+
+      expect(apiClient.categories.create).toHaveBeenCalledWith({
+        name: 'Food',
+        type: 'expense',
+        parentId: null,
+        color: undefined,
+        icon: undefined,
+        description: undefined,
+        sortOrder: undefined,
+        isActive: true,
+      });
 
       expect(category).toEqual({
         id: 'cat1',
@@ -72,7 +123,7 @@ describe('Storage', () => {
         userId: 'user1',
         type: 'expense',
         parentId: null,
-        createdAt: mockCategory.created_at,
+        createdAt: mockCategory.createdAt,
         color: null,
         icon: null,
         description: null,
@@ -81,20 +132,21 @@ describe('Storage', () => {
       });
     });
 
-    it('creates a subcategory', async () => {
-      const mockCategory = { 
-        id: 'cat2', 
-        name: 'Groceries', 
-        user_id: 'user1', 
-        type: 'expense',
-        created_at: new Date().toISOString(), 
-        parent_id: 'cat1' 
+    it('creates a subcategory via apiClient', async () => {
+      const mockCategory = {
+        id: 'cat2',
+        name: 'Groceries',
+        userId: 'user1',
+        type: 'expense' as const,
+        parentId: 'cat1',
+        color: null,
+        icon: null,
+        description: null,
+        sortOrder: null,
+        isActive: true,
+        createdAt: new Date().toISOString(),
       };
-      (supabase.from as any).mockReturnValue({
-        insert: vi.fn().mockReturnValue({
-          select: vi.fn().mockResolvedValue({ data: [mockCategory], error: null }),
-        }),
-      });
+      (apiClient.categories.create as any).mockResolvedValue(mockCategory);
 
       const category = await categoryStorage.create('Groceries', 'user1', 'expense', 'cat1');
 
@@ -104,7 +156,7 @@ describe('Storage', () => {
         userId: 'user1',
         type: 'expense',
         parentId: 'cat1',
-        createdAt: mockCategory.created_at,
+        createdAt: mockCategory.createdAt,
         color: null,
         icon: null,
         description: null,
@@ -115,76 +167,80 @@ describe('Storage', () => {
   });
 
   describe('fundSourceStorage', () => {
-    it('creates a fund source', async () => {
-      const mockFundSource = { id: 'fs1', name: 'BCA', balance: 100000, user_id: 'user1', created_at: new Date().toISOString() };
-      (supabase.from as any).mockReturnValue({
-        insert: vi.fn().mockReturnValue({
-          select: vi.fn().mockResolvedValue({ data: [mockFundSource], error: null }),
-        }),
-      });
-
-      const fundSource = await fundSourceStorage.create('BCA', 100000, 'user1');
-
-      expect(fundSource).toEqual({
+    it('creates a fund source via apiClient', async () => {
+      const mockFundSource = {
         id: 'fs1',
         name: 'BCA',
         balance: 100000,
         userId: 'user1',
-        createdAt: mockFundSource.created_at,
+        type: 'bank' as const,
+        createdAt: new Date().toISOString(),
+        accountNumber: null,
+        accountHolderName: null,
+        cardExpiry: null,
+        colorTheme: 'lime',
+        isActive: true,
+      };
+      (apiClient.fundSources.create as any).mockResolvedValue(mockFundSource);
+
+      const fundSource = await fundSourceStorage.create('BCA', 100000, 'user1');
+
+      expect(apiClient.fundSources.create).toHaveBeenCalledWith({
+        name: 'BCA',
+        balance: 100000,
+        type: 'bank',
+        accountNumber: null,
+        accountHolderName: null,
+        cardExpiry: null,
+        colorTheme: 'lime',
+        isActive: true,
       });
+
+      expect(fundSource.id).toBe('fs1');
+      expect(fundSource.name).toBe('BCA');
+      expect(fundSource.balance).toBe(100000);
     });
   });
 
   describe('transactionStorage', () => {
-    it('creates a transaction', async () => {
+    it('creates a transaction via apiClient', async () => {
       const mockTransaction = {
         id: 't1',
         description: 'Lunch',
         amount: 50000,
         type: 'expense' as const,
-        transaction_date: new Date().toISOString(),
-        user_id: 'user1',
-        category_id: 'cat1',
-        source_fund_id: 'fs1',
-        destination_fund_id: null,
-        created_at: new Date().toISOString(),
+        transactionDate: new Date().toISOString(),
+        userId: 'user1',
+        categoryId: 'cat1',
+        sourceFundId: 'fs1',
+        destinationFundId: null,
+        fee: 0,
+        notes: null,
+        status: 'completed',
+        createdAt: new Date().toISOString(),
       };
-      (supabase.from as any).mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({ data: { balance: 10000000 }, error: null }),
-          }),
-        }),
-      });
-
-      (supabase.rpc as any).mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          single: vi.fn().mockResolvedValue({ data: mockTransaction, error: null }),
-        }),
-      });
+      (apiClient.transactions.create as any).mockResolvedValue(mockTransaction);
 
       const transaction = await transactionStorage.create({
         description: 'Lunch',
         amount: 50000,
         type: 'expense',
-        transactionDate: mockTransaction.transaction_date,
-        userId: 'user1',
-        categoryId: 'cat1',
-        fundSourceId: 'fs1',
-      });
-
-      expect(transaction).toEqual({
-        id: 't1',
-        description: 'Lunch',
-        amount: 50000,
-        type: 'expense',
-        transactionDate: mockTransaction.transaction_date,
+        transactionDate: mockTransaction.transactionDate,
         userId: 'user1',
         categoryId: 'cat1',
         sourceFundId: 'fs1',
-        destinationFundId: null,
-        createdAt: mockTransaction.created_at,
       });
+
+      expect(apiClient.transactions.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          description: 'Lunch',
+          amount: 50000,
+          type: 'expense',
+        })
+      );
+
+      expect(transaction.id).toBe('t1');
+      expect(transaction.amount).toBe(50000);
     });
   });
 
@@ -216,33 +272,25 @@ describe('Storage', () => {
   });
 
   describe('financialGoalsStorage', () => {
-    it('fetches goals and converts cents to whole rupiah', async () => {
-      const mockGoalsDb = [
+    it('fetches goals via apiClient', async () => {
+      const mockGoals = [
         {
           id: 'goal-1',
-          user_id: 'user-1',
+          userId: 'user-1',
           name: 'Dana Cadangan Kas',
           description: 'Emergency reserve',
-          target_amount: 1000000000, // 10,000,000 in cents
-          current_amount: 500000000, // 5,000,000 in cents
+          targetAmount: 10000000,
+          currentAmount: 5000000,
           category: 'savings',
-          target_date: '2026-12-31',
+          targetDate: '2026-12-31',
           status: 'active',
           priority: 10,
-          created_at: '2026-01-01T00:00:00Z',
-          updated_at: '2026-01-01T00:00:00Z',
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
         },
       ];
 
-      (supabase.from as any).mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            order: vi.fn().mockReturnValue({
-              order: vi.fn().mockResolvedValue({ data: mockGoalsDb, error: null }),
-            }),
-          }),
-        }),
-      });
+      (apiClient.financialGoals.list as any).mockResolvedValue(mockGoals);
 
       const goals = await financialGoalsStorage.getAll('user-1');
       expect(goals).toHaveLength(1);
@@ -251,32 +299,23 @@ describe('Storage', () => {
       expect(goals[0].name).toBe('Dana Cadangan Kas');
     });
 
-    it('upserts a goal and converts whole rupiah to cents', async () => {
-      const upsertMock = vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          single: vi.fn().mockResolvedValue({
-            data: {
-              id: 'goal-new',
-              user_id: 'user-1',
-              name: 'Investasi Mesin',
-              description: null,
-              target_amount: 5000000000, // 50m in cents
-              current_amount: 1000000000, // 10m in cents
-              category: 'investment',
-              target_date: '2027-01-01',
-              status: 'active',
-              priority: 0,
-              created_at: '2026-01-01T00:00:00Z',
-              updated_at: '2026-01-01T00:00:00Z',
-            },
-            error: null,
-          }),
-        }),
-      });
+    it('upserts a goal via apiClient', async () => {
+      const mockResult = {
+        id: 'goal-new',
+        userId: 'user-1',
+        name: 'Investasi Mesin',
+        description: null,
+        targetAmount: 50000000,
+        currentAmount: 10000000,
+        category: 'investment',
+        targetDate: '2027-01-01',
+        status: 'active',
+        priority: 0,
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      };
 
-      (supabase.from as any).mockReturnValue({
-        upsert: upsertMock,
-      });
+      (apiClient.financialGoals.upsert as any).mockResolvedValue(mockResult);
 
       const result = await financialGoalsStorage.upsert({
         user_id: 'user-1',
@@ -288,13 +327,13 @@ describe('Storage', () => {
         status: 'active',
       });
 
-      expect(upsertMock).toHaveBeenCalledWith([
+      expect(apiClient.financialGoals.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
-          target_amount: 5000000000,
-          current_amount: 1000000000,
-          category: 'investment',
-        }),
-      ]);
+          name: 'Investasi Mesin',
+          targetAmount: 50000000,
+          currentAmount: 10000000,
+        })
+      );
       expect(result.target_amount).toBe(50000000);
       expect(result.current_amount).toBe(10000000);
     });

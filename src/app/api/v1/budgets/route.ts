@@ -15,9 +15,14 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const month = url.searchParams.get("month") || undefined;
   const history = url.searchParams.get("history") === "true";
+  const withItems = url.searchParams.get("withItems") === "true";
 
   try {
     const service = new BudgetDomainService(auth.context);
+    if (withItems) {
+      const data = await service.getBudgetsWithItems();
+      return jsonResponse({ data });
+    }
     if (history) {
       const data = await service.getHistory();
       return jsonResponse({ data });
@@ -26,7 +31,7 @@ export async function GET(req: Request) {
     return jsonResponse({ data });
   } catch (err: any) {
     const status = err instanceof DomainError ? err.statusCode : 500;
-    return jsonResponse({ error: err.message }, status);
+    return jsonResponse({ error: err.message, code: err.code, details: err.details }, status);
   }
 }
 
@@ -43,6 +48,6 @@ export async function POST(req: Request) {
     return jsonResponse({ data }, 200);
   } catch (err: any) {
     const status = err instanceof DomainError ? err.statusCode : 400;
-    return jsonResponse({ error: err.message, details: (err as any).details }, status);
+    return jsonResponse({ error: err.message, code: err.code, details: (err as any).details }, status);
   }
 }

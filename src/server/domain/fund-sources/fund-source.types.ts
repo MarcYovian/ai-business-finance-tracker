@@ -1,4 +1,4 @@
-export type FundSourceType = "bank" | "cash" | "e-wallet" | "credit_card";
+export type FundSourceType = "bank" | "cash" | "e-wallet" | "wallet" | "credit_card" | "other";
 
 export interface FundSourceDTO {
   id: string;

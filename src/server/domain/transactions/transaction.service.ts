@@ -155,19 +155,21 @@ export class TransactionDomainService implements ITransactionService {
       );
     }
 
+    const tx = newTx as any;
+
     return {
-      id: newTx.id,
-      description: newTx.description,
-      amount: newTx.amount / 100,
-      type: newTx.type,
-      transactionDate: newTx.transaction_date,
-      createdAt: newTx.created_at,
-      userId: newTx.user_id,
-      categoryId: newTx.category_id,
-      sourceFundId: newTx.source_fund_id,
-      destinationFundId: newTx.destination_fund_id,
-      notes: newTx.notes,
-      status: newTx.status,
+      id: tx.id,
+      description: tx.description,
+      amount: tx.amount / 100,
+      type: tx.type,
+      transactionDate: tx.transaction_date,
+      createdAt: tx.created_at,
+      userId: tx.user_id,
+      categoryId: tx.category_id,
+      sourceFundId: tx.source_fund_id,
+      destinationFundId: tx.destination_fund_id,
+      notes: tx.notes,
+      status: tx.status,
     };
   }
 
@@ -203,18 +205,114 @@ export class TransactionDomainService implements ITransactionService {
   }
 
   /**
-   * Deletes a transaction atomically and reverts fund balances via PostgreSQL RPC
+   * Deletes a transaction atomically and reverts fund balances via PostgreSQL RPC or fallback
    */
   async delete(id: string): Promise<void> {
     // Check existence first
-    await this.getById(id);
+    const existing = await this.getById(id);
 
-    const { error } = await this.ctx.supabase.rpc("delete_transaction_and_revert_balance", {
+    const { error: rpcErr } = await this.ctx.supabase.rpc("delete_transaction_and_revert_balance", {
       p_transaction_id: id,
     });
 
-    if (error) {
-      throw new DatabaseOperationError("delete_transaction_and_revert_balance", error.message);
+    if (!rpcErr) {
+      return;
+    }
+
+    // Fallback: Revert fund balance and delete using standard Supabase SDK
+    const amountInCents = Math.round(existing.amount * 100);
+
+    // 1. Revert child transactions (such as transfer admin fee)
+    const { data: children } = await this.ctx.supabase
+      .from("transactions")
+      .select("id, amount, source_fund_id, type")
+      .eq("parent_transaction_id", id);
+
+    if (children && children.length > 0) {
+      for (const child of children) {
+        if (child.source_fund_id) {
+          const { data: fund } = await this.ctx.supabase
+            .from("fund_sources")
+            .select("balance")
+            .eq("id", child.source_fund_id)
+            .single();
+          if (fund) {
+            await this.ctx.supabase
+              .from("fund_sources")
+              .update({ balance: fund.balance + child.amount })
+              .eq("id", child.source_fund_id);
+          }
+        }
+        await this.ctx.supabase.from("transactions").delete().eq("id", child.id);
+      }
+    }
+
+    // 2. Revert main transaction balance
+    if (existing.type === "expense" && existing.sourceFundId) {
+      const { data: fund } = await this.ctx.supabase
+        .from("fund_sources")
+        .select("balance")
+        .eq("id", existing.sourceFundId)
+        .single();
+      if (fund) {
+        await this.ctx.supabase
+          .from("fund_sources")
+          .update({ balance: fund.balance + amountInCents })
+          .eq("id", existing.sourceFundId);
+      }
+    } else if (existing.type === "income") {
+      const fundId = existing.sourceFundId || existing.destinationFundId;
+      if (fundId) {
+        const { data: fund } = await this.ctx.supabase
+          .from("fund_sources")
+          .select("balance")
+          .eq("id", fundId)
+          .single();
+        if (fund) {
+          await this.ctx.supabase
+            .from("fund_sources")
+            .update({ balance: fund.balance - amountInCents })
+            .eq("id", fundId);
+        }
+      }
+    } else if (existing.type === "transfer") {
+      if (existing.sourceFundId) {
+        const { data: srcFund } = await this.ctx.supabase
+          .from("fund_sources")
+          .select("balance")
+          .eq("id", existing.sourceFundId)
+          .single();
+        if (srcFund) {
+          await this.ctx.supabase
+            .from("fund_sources")
+            .update({ balance: srcFund.balance + amountInCents })
+            .eq("id", existing.sourceFundId);
+        }
+      }
+      if (existing.destinationFundId) {
+        const { data: destFund } = await this.ctx.supabase
+          .from("fund_sources")
+          .select("balance")
+          .eq("id", existing.destinationFundId)
+          .single();
+        if (destFund) {
+          await this.ctx.supabase
+            .from("fund_sources")
+            .update({ balance: destFund.balance - amountInCents })
+            .eq("id", existing.destinationFundId);
+        }
+      }
+    }
+
+    // 3. Delete main transaction
+    const { error: delErr } = await this.ctx.supabase
+      .from("transactions")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", this.ctx.userId);
+
+    if (delErr) {
+      throw new DatabaseOperationError("delete transaction", delErr.message);
     }
   }
 }

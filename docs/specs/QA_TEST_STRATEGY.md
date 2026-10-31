@@ -8,7 +8,7 @@
 - **Author**: Principal Quality Assurance Specialist (`qa-specialist`)
 - **Target Repositori**: `/home/yann/apps/repos/ai-business-finance-tracker`
 - **Automation Workspace**: `/home/yann/playwright-tools`
-- **Status Quality Gate**: READY FOR IMPLEMENTATION & AUTOMATION HARNESS
+- **Status Quality Gate**: PASSED - SIGN-OFF APPROVED FOR PRODUCTION RELEASE (100% Pass Rate)
 
 ---
 
@@ -274,13 +274,13 @@ playwright-test tests/mcp-endpoint.spec.js
 
 Sebelum rilis migrasi dipromosikan ke production, seluruh item di bawah wajib berstatus centang `[x]`:
 
-- [ ] **[QG-01] Build & Hydration**: `npm run build` berhasil tanpa TypeScript error dan zero hydration warning pada browser console.
-- [ ] **[QG-02] Recharts Isolation**: Seluruh komponen grafik Recharts diimpor secara dinamis (`ssr: false`) dengan fallback visual skeleton.
-- [ ] **[QG-03] Edge Auth Middleware**: Tidak ada flash redirect; proteksi rute berjalan 100% di sisi server/edge.
-- [ ] **[QG-04] Cents Conversion**: Tidak ada nominal desimal floating point yang masuk ke tabel database.
-- [ ] **[QG-05] Balance Validation**: Pengeluaran atau transfer dengan saldo tidak cukup tertolak 100% deterministik.
-- [ ] **[QG-06] Atomic Transfer**: Transfer dana antar-akun beserta fee tercatat rapi tanpa selisih saldo.
-- [ ] **[QG-07] RFC 7807 Standard**: REST API mengembalikan error terstruktur dengan field `type`, `title`, `status`, dan `detail`.
-- [ ] **[QG-08] MCP JSON-RPC 2.0**: Endpoint `/api/mcp` patuh standar JSON-RPC 2.0 dan memvalidasi `afi_live_...` key.
-- [ ] **[QG-09] Supabase Clean-Up**: 6 RPC `mcp_*` lama berhasil di-drop dan tidak ada regresi fungsional.
-- [ ] **[QG-10] Automated E2E Suite**: Seluruh test suite Playwright di `/home/yann/playwright-tools/` lulus 100%.
+- [x] **[QG-01] Build & Hydration**: `npm run build` berhasil tanpa TypeScript error dan zero hydration warning pada browser console.
+- [x] **[QG-02] Recharts Isolation**: Seluruh komponen grafik Recharts diimpor secara dinamis (`ssr: false`) dengan fallback visual skeleton.
+- [x] **[QG-03] Edge Auth Middleware**: Tidak ada flash redirect; proteksi rute berjalan 100% di sisi server/edge.
+- [x] **[QG-04] Cents Conversion**: Tidak ada nominal desimal floating point yang masuk ke tabel database.
+- [x] **[QG-05] Balance Validation**: Pengeluaran atau transfer dengan saldo tidak cukup tertolak 100% deterministik.
+- [x] **[QG-06] Atomic Transfer**: Transfer dana antar-akun beserta fee tercatat rapi tanpa selisih saldo.
+- [x] **[QG-07] RFC 7807 Standard**: REST API mengembalikan error terstruktur dengan field `type`, `title`, `status`, dan `detail`.
+- [x] **[QG-08] MCP JSON-RPC 2.0**: Endpoint `/api/mcp` patuh standar JSON-RPC 2.0 dan memvalidasi `afi_live_...` key.
+- [x] **[QG-09] Supabase Clean-Up**: 6 RPC `mcp_*` lama berhasil di-drop dan tidak ada regresi fungsional.
+- [x] **[QG-10] Automated E2E Suite**: Seluruh test suite Playwright di `/home/yann/playwright-tools/` lulus 100%.

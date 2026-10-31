@@ -2,14 +2,12 @@ import { useMemo } from "react";
 import { toast } from "@/components/ui/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { budgetStorage } from "@/lib/storage";
-import { supabase } from "@/lib/supabase";
 import { Budget, BudgetDetail, BudgetItem } from "@/types/finance";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 // Get the authenticated user
 const useUser = () => {
   const { user } = useAuth();
-  if (!user) throw new Error("User not authenticated");
   return user;
 };
 
@@ -149,14 +147,16 @@ export const useBudgetDetails = (budgetId: string | null | undefined) => {
 };
 
 export const useCurrentBudget = (month: Date) => {
-  const user = useUser();
+  const { user } = useAuth();
+  const userId = user?.id || "";
   const startDate = new Date(Date.UTC(month.getFullYear(), month.getMonth(), 1))
     .toISOString()
     .split("T")[0];
 
   return useQuery<Budget | null, Error>({
-    queryKey: ["currentBudget", user.id, startDate],
-    queryFn: () => budgetStorage.getOrCreateForMonth(user.id, month),
+    queryKey: ["currentBudget", userId, startDate],
+    queryFn: () => (userId ? budgetStorage.getOrCreateForMonth(userId, month) : Promise.resolve(null)),
+    enabled: !!userId,
   });
 };
 
@@ -195,10 +195,11 @@ type UpsertBudgetPayload = Omit<Budget, "id" | "user_id" | "created_at"> & {
  */
 export const useUpsertBudget = () => {
   const queryClient = useQueryClient();
-  const user = useUser();
+  const { user } = useAuth();
 
   return useMutation({
     mutationFn: async (payload: UpsertBudgetPayload) => {
+      if (!user) throw new Error("User not authenticated");
       // Step 1: Upsert the budget period to get its ID
       await budgetStorage.upsert({
         ...payload,
