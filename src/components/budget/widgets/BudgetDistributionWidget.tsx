@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState } from 'react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import { CategoryDistributionItem } from '../types';

@@ -1,5 +1,7 @@
+'use client';
+
 import { useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { ChevronRight } from 'lucide-react';
 import { generateInsights } from '@/lib/insights';
 import { Category, Transaction } from '@/types/finance';
@@ -13,7 +15,8 @@ export function BusinessInsightWidget({
   transactions,
   categories,
 }: BusinessInsightWidgetProps) {
-  const navigate = useNavigate();
+  const router = useRouter();
+  const navigate = (path: string) => router.push(path);
 
   const insights = useMemo(() => {
     return generateInsights(transactions, categories);

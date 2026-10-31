@@ -1,5 +1,7 @@
+'use client';
+
 import { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Wallet, Coins } from 'lucide-react';
 import { formatCurrency } from '@/lib/currency';
 import { FundSource } from '@/types/finance';
@@ -15,7 +17,8 @@ export function FundSourceCardSlider({
   fundSources,
   userName = 'Arya Danuarta',
 }: FundSourceCardSliderProps) {
-  const navigate = useNavigate();
+  const router = useRouter();
+  const navigate = (path: string) => router.push(path);
   const [activeCardIndex, setActiveCardIndex] = useState<number>(0);
 
   const activeFundSources = useMemo(() => {

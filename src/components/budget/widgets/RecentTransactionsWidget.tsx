@@ -1,5 +1,7 @@
+'use client';
+
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { BudgetRecentTransactionItem } from '../types';
 import { getCategoryIcon } from '../constants';
 import { formatCurrency } from '@/lib/currency';
@@ -11,7 +13,8 @@ interface RecentTransactionsWidgetProps {
 export const RecentTransactionsWidget: React.FC<RecentTransactionsWidgetProps> = ({
   transactions,
 }) => {
-  const navigate = useNavigate();
+  const router = useRouter();
+  const navigate = (path: string) => router.push(path);
 
   return (
     <div className="bg-white rounded-2xl border border-[#E7EBE4] p-4 sm:p-5 shadow-2xs space-y-4">

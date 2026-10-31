@@ -29,5 +29,12 @@ dist-ssr
 
 # Backups and scratch debug files
 *.backup
+*.bak.*
 debug-*.ts
+
+# Next.js build output
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
 

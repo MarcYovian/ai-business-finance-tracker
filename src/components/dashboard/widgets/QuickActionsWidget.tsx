@@ -1,4 +1,6 @@
-import { useNavigate } from 'react-router-dom';
+'use client';
+
+import { useRouter } from 'next/navigation';
 import {
   PlusCircle,
   Send,
@@ -8,7 +10,8 @@ import {
 } from 'lucide-react';
 
 export function QuickActionsWidget() {
-  const navigate = useNavigate();
+  const router = useRouter();
+  const navigate = (path: string) => router.push(path);
 
   const actions = [
     {

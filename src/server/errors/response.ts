@@ -1,0 +1,12 @@
+/**
+ * Universal JSON response helper ensuring compatibility across all TypeScript runtimes
+ */
+export function jsonResponse(data: unknown, status = 200, headers: HeadersInit = {}): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      "Content-Type": "application/json",
+      ...headers,
+    },
+  });
+}

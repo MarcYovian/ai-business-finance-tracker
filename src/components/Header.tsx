@@ -1,5 +1,7 @@
+'use client';
+
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useCategories } from '@/hooks/useCategories';
@@ -74,7 +76,8 @@ interface NotificationItem {
 
 export const Header: React.FC<HeaderProps> = ({ onMobileMenuClick }) => {
   const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const router = useRouter();
+  const navigate = (path: string) => router.push(path);
 
   // Search Palette State
   const [isSearchOpen, setIsSearchOpen] = useState(false);

@@ -1,11 +1,36 @@
-# Abaikan folder dependencies di host
+# Dependencies & build artifacts
 node_modules
-
-# Abaikan folder build
+.next
+out
 dist
+build
+.cache
 
-# Abaikan file .env (agar tidak masuk ke image)
-.env
-
-# Abaikan folder Git
+# Version control & local IDE
 .git
+.gitignore
+.github
+.vscode
+.idea
+
+# Environment files
+.env.local
+.env.*.local
+
+# Backups & logs
+*.bak.*
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Documentation & tests
+docs
+coverage
+__tests__
+*.spec.ts
+*.spec.tsx
+*.spec.js
+*.test.ts
+*.test.tsx
+*.test.js

@@ -1,9 +1,10 @@
-import { supabase } from "@/lib/supabase";
+'use client';
+
+import { createClient } from "@/lib/supabase/client";
 import { User } from "@/types/finance";
 import {
   AuthChangeEvent,
   Session,
-  User as SupabaseUser,
 } from "@supabase/supabase-js";
 import React, { createContext, useContext, useEffect, useState } from "react";
 
@@ -17,11 +18,13 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+export const AuthProvider: React.FC<{
+  children: React.ReactNode;
+  initialUser?: User | null;
+}> = ({ children, initialUser = null }) => {
+  const [user, setUser] = useState<User | null>(initialUser);
+  const [isLoading, setIsLoading] = useState(!initialUser);
+  const supabase = createClient();
 
   useEffect(() => {
     const getInitialUser = async () => {
@@ -35,6 +38,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           email: supabaseUser.email || "",
           createdAt: supabaseUser.created_at,
         });
+      } else {
+        setUser(null);
       }
       setIsLoading(false);
     };
@@ -80,11 +85,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const logout = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
+    setUser(null);
   };
 
   return (
     <AuthContext.Provider value={{ user, login, signup, logout, isLoading }}>
-      {!isLoading && children}
+      {children}
     </AuthContext.Provider>
   );
 };

@@ -1,76 +1,64 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { authenticateMcpRequest } from "./auth.js";
-import { createFinanceMcpServer } from "./server.js";
+import { resolveAuthContext } from "@/server/auth/resolver";
+import { createMcpServerInstance } from "@/server/mcp/server";
+
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS, DELETE",
+  "Access-Control-Allow-Headers":
+    "Content-Type, Authorization, x-api-key, X-Api-Key, MCP-Protocol-Version, Last-Event-ID",
+};
 
 /**
  * Universal Web Standard Request/Response handler for MCP Streamable HTTP Transport.
- * Compatible with Vite Dev Server, Vercel Serverless Functions, and Cloudflare/Node runtimes.
  */
 export async function handleMcpRequest(req: Request): Promise<Response> {
-  // 1. Handle CORS Preflight
   if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS, DELETE",
-        "Access-Control-Allow-Headers":
-          "Content-Type, Authorization, x-api-key, X-Api-Key, MCP-Protocol-Version, Last-Event-ID",
-      },
+      headers: CORS_HEADERS,
     });
   }
 
-  // 2. Authenticate Request (via API Key 'afi_live_...' or Supabase JWT)
-  let authContext;
-  try {
-    const authHeader =
-      req.headers.get("Authorization") ||
-      req.headers.get("x-api-key") ||
-      req.headers.get("X-Api-Key");
-    authContext = await authenticateMcpRequest(authHeader);
-  } catch (error: any) {
+  const authResult = await resolveAuthContext(req);
+  if (!authResult.success) {
     return new Response(
       JSON.stringify({
         jsonrpc: "2.0",
         error: {
           code: -32001,
-          message: error.message || "Unauthorized",
+          message: authResult.error,
         },
       }),
       {
-        status: 401,
+        status: authResult.statusCode || 401,
         headers: {
           "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*",
+          ...CORS_HEADERS,
         },
       }
     );
   }
 
-  // 3. Initialize Stateless Streamable HTTP Transport
+  const authContext = authResult.context;
+
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
   });
 
-  // 4. Initialize User-Scoped McpServer and connect
-  const server = createFinanceMcpServer(authContext.userId, authContext.supabase, authContext.keyHash);
+  const server = createMcpServerInstance(authContext);
   await server.connect(transport);
 
-  // 5. Handle Request
-  const res = await transport.handleRequest(req);
+  const response = await transport.handleRequest(req);
 
-  // 6. Attach CORS headers to response
-  const headers = new Headers(res.headers);
-  headers.set("Access-Control-Allow-Origin", "*");
-  headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, DELETE");
-  headers.set(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, x-api-key, X-Api-Key, MCP-Protocol-Version, Last-Event-ID"
-  );
+  const headers = new Headers(response.headers);
+  for (const [key, val] of Object.entries(CORS_HEADERS)) {
+    headers.set(key, val);
+  }
 
-  return new Response(res.body, {
-    status: res.status,
-    statusText: res.statusText,
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
     headers,
   });
 }

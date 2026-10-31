@@ -1,9 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "functions": {
-    "api/mcp.ts": {
-      "maxDuration": 30,
-      "includeFiles": "api/_lib/**"
-    }
-  }
+  "framework": "nextjs"
 }

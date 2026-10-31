@@ -1,5 +1,7 @@
+'use client';
+
 import { useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { ArrowUpRight, Wallet, Receipt } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/currency';
 import { Transaction } from '@/types/finance';
@@ -11,7 +13,8 @@ interface RecentTransactionsWidgetProps {
 export function RecentTransactionsWidget({
   transactions,
 }: RecentTransactionsWidgetProps) {
-  const navigate = useNavigate();
+  const router = useRouter();
+  const navigate = (path: string) => router.push(path);
 
   const recentTransactions = useMemo(() => {
     return [...transactions]

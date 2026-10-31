@@ -5,10 +5,13 @@
 export const FEATURES = {
   /**
    * Mengatur ketersediaan AI Assistant, rute /ai-assistant, dan tab AI di Settings.
-   * Nilai default: false (fitur AI dinonaktifkan sementara).
-   * Dapat di-override via environment variable VITE_ENABLE_AI=true jika diinginkan.
+   * Dapat di-override via environment variable NEXT_PUBLIC_ENABLE_AI=true atau VITE_ENABLE_AI=true.
    */
-  ENABLE_AI: import.meta.env.VITE_ENABLE_AI === 'true' ? true : false,
+  ENABLE_AI:
+    (typeof process !== 'undefined' &&
+      (process.env.NEXT_PUBLIC_ENABLE_AI === 'true' ||
+        process.env.VITE_ENABLE_AI === 'true')) ||
+    true, // default true in active AI tracker
 
   /**
    * Menampilkan kartu insight analitik di Dashboard.

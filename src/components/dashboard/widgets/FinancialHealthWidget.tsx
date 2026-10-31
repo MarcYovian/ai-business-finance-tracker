@@ -1,5 +1,7 @@
+'use client';
+
 import { useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import {
   HeartPulse,
   AlertCircle,
@@ -22,7 +24,8 @@ export function FinancialHealthWidget({
   transactions,
   totalFundBalance,
 }: FinancialHealthWidgetProps) {
-  const navigate = useNavigate();
+  const router = useRouter();
+  const navigate = (path: string) => router.push(path);
 
   const now = new Date();
   const currentYear = now.getFullYear();

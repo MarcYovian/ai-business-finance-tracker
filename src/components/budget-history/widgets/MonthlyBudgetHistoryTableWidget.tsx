@@ -1,5 +1,7 @@
+'use client';
+
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { MoreHorizontal, Calendar, Receipt } from 'lucide-react';
 import { BudgetHistoryMonthItem } from '../types';
 import { STATUS_CONFIG } from '../constants';
@@ -19,14 +21,14 @@ interface MonthlyBudgetHistoryTableWidgetProps {
 export const MonthlyBudgetHistoryTableWidget: React.FC<
   MonthlyBudgetHistoryTableWidgetProps
 > = ({ monthlyHistory }) => {
-  const navigate = useNavigate();
+  const router = useRouter();
 
   const handleNavigateToMonth = (monthKey: string) => {
-    navigate('/budget', { state: { targetDate: `${monthKey}-01` } });
+    router.push(`/budget?month=${monthKey}-01`);
   };
 
   const handleNavigateToTransactions = () => {
-    navigate('/transactions');
+    router.push('/transactions');
   };
 
   const getProgressBarColor = (progress: number) => {

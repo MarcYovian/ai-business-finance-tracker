@@ -1,22 +1,39 @@
-version: '3.8'
 services:
-  # Nama service kita, bisa apa saja
-  app:
-    # Perintahkan Docker untuk build image dari Dockerfile di direktori ini
-    build: .
-    # Mapping port: 
-    # Port "8080" di Pop!_OS Anda akan terhubung ke port "8080" di dalam container
+  web:
+    container_name: ai-business-finance-tracker
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+    image: ai-business-finance-tracker:latest
+    restart: unless-stopped
     ports:
-      - "8080:8080"
-    # Ini adalah bagian terpenting untuk development:
-    volumes:
-      # 1. Mount semua file dari direktori ini (host) ke /app (container)
-      #    Artinya, editan Anda di VSCode akan langsung terlihat di container.
-      - .:/app
-      # 2. "Volume anonim" untuk node_modules.
-      #    Ini mencegah folder node_modules di host (yang kosong)
-      #    menimpa folder node_modules di dalam container (yang sudah di-install).
-      - /app/node_modules
-    # Beritahu Docker untuk memuat environment variables dari file .env
+      # Bound to localhost for ingress isolation (Zero Open Ports)
+      - "127.0.0.1:${APP_PORT:-3005}:3000"
     env_file:
       - .env
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024M
+        reservations:
+          cpus: '0.2'
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health > /dev/null 2>&1 || wget -qO- http://127.0.0.1:3000/ > /dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

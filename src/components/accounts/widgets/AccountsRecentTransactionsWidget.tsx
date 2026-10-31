@@ -1,6 +1,8 @@
+'use client';
+
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { ArrowUpRight, ArrowDownLeft, ArrowRightLeft } from 'lucide-react';
 import { Transaction } from '@/types/finance';
 import { formatCurrency } from '@/lib/currency';
@@ -17,7 +19,8 @@ interface AccountsRecentTransactionsWidgetProps {
 export const AccountsRecentTransactionsWidget: React.FC<AccountsRecentTransactionsWidgetProps> = ({
   transactions,
 }) => {
-  const navigate = useNavigate();
+  const router = useRouter();
+  const navigate = (path: string) => router.push(path);
 
   const renderTxIcon = (tx: EnrichedTransaction) => {
     if (tx.type === 'transfer') {

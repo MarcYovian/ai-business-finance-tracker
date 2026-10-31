@@ -1,5 +1,7 @@
+'use client';
+
 import { ReactNode, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import {
@@ -60,14 +62,14 @@ const navItems = baseNavItems.filter((item) => {
 });
 
 const SidebarNav = ({ onLinkClick }: { onLinkClick?: () => void }) => {
-  const navigate = useNavigate();
-  const location = useLocation();
+  const router = useRouter();
+  const pathname = usePathname();
   const [budgetOpen, setBudgetOpen] = useState(() =>
-    location.pathname.startsWith('/budget')
+    pathname.startsWith('/budget')
   );
 
   const handleNavigate = (path: string) => {
-    navigate(path);
+    router.push(path);
     onLinkClick?.();
   };
 
@@ -76,7 +78,7 @@ const SidebarNav = ({ onLinkClick }: { onLinkClick?: () => void }) => {
       {navItems.map((item) => {
         const Icon = item.icon;
         const hasChildren = item.children && item.children.length > 0;
-        const isParentActive = location.pathname.startsWith(item.path);
+        const isParentActive = pathname.startsWith(item.path);
 
         if (hasChildren) {
           return (
@@ -108,8 +110,8 @@ const SidebarNav = ({ onLinkClick }: { onLinkClick?: () => void }) => {
                   {item.children!.map((child) => {
                     const isChildActive =
                       child.path === '/budget'
-                        ? location.pathname === '/budget' || location.pathname === '/budget/monthly'
-                        : location.pathname === child.path;
+                        ? pathname === '/budget' || pathname === '/budget/monthly'
+                        : pathname === child.path;
 
                     return (
                       <button
@@ -135,7 +137,7 @@ const SidebarNav = ({ onLinkClick }: { onLinkClick?: () => void }) => {
           );
         }
 
-        const isActive = location.pathname === item.path;
+        const isActive = pathname === item.path;
 
         return (
           <button
@@ -162,11 +164,11 @@ const SidebarNav = ({ onLinkClick }: { onLinkClick?: () => void }) => {
 
 const SidebarContent = ({ onLinkClick }: { onLinkClick?: () => void }) => {
   const { logout } = useAuth();
-  const navigate = useNavigate();
+  const router = useRouter();
 
-  const handleLogout = () => {
-    logout();
-    navigate('/');
+  const handleLogout = async () => {
+    await logout();
+    router.push('/');
   };
 
   return (
@@ -204,10 +206,6 @@ const SidebarContent = ({ onLinkClick }: { onLinkClick?: () => void }) => {
 export const Layout = ({ children }: LayoutProps) => {
   const isMobile = useIsMobile();
   const [isSheetOpen, setSheetOpen] = useState(false);
-
-  if (isMobile === undefined) {
-    return null;
-  }
 
   return (
     <div className="min-h-screen w-full flex bg-[#F5F6F3] antialiased text-[#1A221C]">

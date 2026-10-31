@@ -1,5 +1,7 @@
+'use client';
+
 import { useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { ChevronRight } from 'lucide-react';
 import { formatCurrency } from '@/lib/currency';
 import { Category, Transaction } from '@/types/finance';
@@ -15,7 +17,8 @@ export function CostAnalysisWidget({
   transactions,
   categories,
 }: CostAnalysisWidgetProps) {
-  const navigate = useNavigate();
+  const router = useRouter();
+  const navigate = (path: string) => router.push(path);
 
   const now = new Date();
   const currentYear = now.getFullYear();

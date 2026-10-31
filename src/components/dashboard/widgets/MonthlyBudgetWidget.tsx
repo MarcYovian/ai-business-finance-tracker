@@ -1,5 +1,7 @@
+'use client';
+
 import { useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { Edit2 } from 'lucide-react';
 import { formatCurrency } from '@/lib/currency';
 import { Transaction } from '@/types/finance';
@@ -15,7 +17,8 @@ export function MonthlyBudgetWidget({
   transactions,
   monthlyLimit,
 }: MonthlyBudgetWidgetProps) {
-  const navigate = useNavigate();
+  const router = useRouter();
+  const navigate = (path: string) => router.push(path);
   const { user } = useAuth();
   const budgetInfo = useMonthlyBudgetLimit(user?.id);
 

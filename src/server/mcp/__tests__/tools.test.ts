@@ -1,211 +1,125 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import {
-  handleListTransactions,
-  handleCreateTransaction,
-  handleUpdateTransaction,
-} from "../tools/transactions";
-import { handleListFundSources } from "../tools/fundSources";
-import { handleListCategories } from "../tools/categories";
+import { createMcpServerInstance } from "../server";
+import { AuthContext } from "@/server/auth/types";
 
-// Mock the underlying services
-vi.mock("../services/transactionService", () => ({
-  listTransactions: vi.fn(),
-  createTransaction: vi.fn(),
-  updateTransaction: vi.fn(),
-}));
-
-vi.mock("../services/fundSourceService", () => ({
-  listFundSources: vi.fn(),
-}));
-
-vi.mock("../services/categoryService", () => ({
-  listCategories: vi.fn(),
-}));
-
-import {
-  listTransactions,
-  createTransaction,
-  updateTransaction,
-} from "../services/transactionService";
-import { listFundSources } from "../services/fundSourceService";
-import { listCategories } from "../services/categoryService";
-
-describe("MCP Tools Handlers", () => {
-  const mockSupabase = {} as any;
-  const mockUserId = "user-123";
+describe("MCP Tools Registration and Dispatch", () => {
+  let mockSupabase: any;
+  let mockAuthContext: AuthContext;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    mockSupabase = {
+      from: vi.fn(),
+      rpc: vi.fn(),
+      auth: { getUser: vi.fn() },
+    };
+
+    mockAuthContext = {
+      userId: "user-test-uuid",
+      authMethod: "api_key",
+      scopes: ["*"],
+      supabase: mockSupabase,
+    };
   });
 
-  describe("Transactions Tools", () => {
-    describe("handleListTransactions", () => {
-      it("should return friendly message when no transactions found", async () => {
-        (listTransactions as any).mockResolvedValue([]);
+  it("should register all required MCP financial tools", () => {
+    const server = createMcpServerInstance(mockAuthContext);
+    const tools = (server as any)._registeredTools;
 
-        const result = await handleListTransactions(mockSupabase, mockUserId, {});
+    expect(tools).toBeDefined();
+    const registeredToolNames = Object.keys(tools);
 
-        expect(result.content[0].text).toContain("Tidak ada transaksi yang ditemukan");
-      });
+    // Core transaction tools
+    expect(registeredToolNames).toContain("list_transactions");
+    expect(registeredToolNames).toContain("create_transaction");
+    expect(registeredToolNames).toContain("update_transaction");
+    expect(registeredToolNames).toContain("delete_transaction");
 
-      it("should format transactions list nicely for AI", async () => {
-        (listTransactions as any).mockResolvedValue([
-          {
-            id: "tx-1",
-            description: "Gaji Karyawan",
-            amount: 5000000,
-            type: "expense",
-            transactionDate: "2026-10-25T10:00:00Z",
-          },
-          {
-            id: "tx-2",
-            description: "Invoice Proyek",
-            amount: 15000000,
-            type: "income",
-            transactionDate: "2026-10-25T11:00:00Z",
-          },
-        ]);
+    // Fund source & balance tools
+    expect(registeredToolNames).toContain("list_fund_sources");
+    expect(registeredToolNames).toContain("get_balance");
 
-        const result = await handleListTransactions(mockSupabase, mockUserId, {});
+    // Category tools
+    expect(registeredToolNames).toContain("list_categories");
+    expect(registeredToolNames).toContain("create_category");
 
-        expect(result.content[0].text).toContain("Ditemukan 2 transaksi");
-        expect(result.content[0].text).toContain("- Rp5.000.000 | Gaji Karyawan");
-        expect(result.content[0].text).toContain("+ Rp15.000.000 | Invoice Proyek");
-      });
+    // Budget tools
+    expect(registeredToolNames).toContain("get_budget");
+    expect(registeredToolNames).toContain("upsert_budget");
 
-      it("should return isError if service throws", async () => {
-        (listTransactions as any).mockRejectedValue(new Error("Database connection failed"));
-
-        const result = await handleListTransactions(mockSupabase, mockUserId, {});
-
-        expect(result.isError).toBe(true);
-        expect(result.content[0].text).toContain("Gagal mengambil daftar transaksi");
-      });
-    });
-
-    describe("handleCreateTransaction", () => {
-      it("should reject expense without sourceFundId", async () => {
-        const result = await handleCreateTransaction(mockSupabase, mockUserId, {
-          description: "Makan Siang",
-          amount: 50000,
-          type: "expense",
-        });
-
-        expect(result.isError).toBe(true);
-        expect(result.content[0].text).toContain("parameter 'sourceFundId' wajib disertakan");
-      });
-
-      it("should reject income without destinationFundId", async () => {
-        const result = await handleCreateTransaction(mockSupabase, mockUserId, {
-          description: "Pendapatan Usaha",
-          amount: 500000,
-          type: "income",
-        });
-
-        expect(result.isError).toBe(true);
-        expect(result.content[0].text).toContain("parameter 'destinationFundId' wajib disertakan");
-      });
-
-      it("should reject transfer without source and destination fund ids", async () => {
-        const result = await handleCreateTransaction(mockSupabase, mockUserId, {
-          description: "Transfer Kas",
-          amount: 200000,
-          type: "transfer",
-          sourceFundId: "fund-1",
-        });
-
-        expect(result.isError).toBe(true);
-        expect(result.content[0].text).toContain("baik 'sourceFundId' maupun 'destinationFundId' wajib disertakan");
-      });
-
-      it("should return confirmation on successful creation", async () => {
-        (createTransaction as any).mockResolvedValue({
-          id: "created-tx-123",
-          description: "Beli Perlengkapan",
-          amount: 150000,
-          type: "expense",
-          transactionDate: "2026-10-25T12:00:00Z",
-        });
-
-        const result = await handleCreateTransaction(mockSupabase, mockUserId, {
-          description: "Beli Perlengkapan",
-          amount: 150000,
-          type: "expense",
-          sourceFundId: "fund-bca",
-        });
-
-        expect(result.content[0].text).toContain("Transaksi berhasil dicatat!");
-        expect(result.content[0].text).toContain("created-tx-123");
-        expect(result.content[0].text).toContain("Rp150.000");
-      });
-    });
-
-    describe("handleUpdateTransaction", () => {
-      it("should return success message on update", async () => {
-        (updateTransaction as any).mockResolvedValue(undefined);
-
-        const result = await handleUpdateTransaction(mockSupabase, mockUserId, {
-          id: "tx-to-update",
-          description: "Deskripsi Baru",
-        });
-
-        expect(result.content[0].text).toContain("Transaksi dengan ID `tx-to-update` berhasil diperbarui");
-      });
-    });
+    // AI Insight tool
+    expect(registeredToolNames).toContain("query_financial_insights");
   });
 
-  describe("Fund Sources Tools", () => {
-    describe("handleListFundSources", () => {
-      it("should calculate total balance and format fund accounts", async () => {
-        (listFundSources as any).mockResolvedValue([
-          {
-            id: "fund-1",
-            name: "Kas Toko",
-            type: "cash",
-            balance: 500000,
-            isActive: true,
-          },
-          {
-            id: "fund-2",
-            name: "BCA Giro",
-            type: "bank",
-            balance: 20000000,
-            isActive: true,
-          },
-        ]);
+  it("should execute list_transactions tool and return formatted JSON string", async () => {
+    const server = createMcpServerInstance(mockAuthContext);
+    const listTransactionsTool = (server as any)._registeredTools["list_transactions"];
 
-        const result = await handleListFundSources(mockSupabase, mockUserId);
+    const mockTransactions = [
+      {
+        id: "tx-mcp-1",
+        description: "Langganan SaaS",
+        amount: 15000000, // 150,000 IDR in cents
+        type: "expense",
+        transaction_date: "2026-10-31T10:00:00Z",
+        created_at: "2026-10-31T10:00:00Z",
+        user_id: "user-test-uuid",
+      },
+    ];
 
-        expect(result.content[0].text).toContain("Total Saldo: Rp20.500.000");
-        expect(result.content[0].text).toContain("**Kas Toko** (cash): Rp500.000");
-        expect(result.content[0].text).toContain("**BCA Giro** (bank): Rp20.000.000");
-      });
-    });
+    const queryBuilder = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      range: vi.fn().mockResolvedValue({ data: mockTransactions, error: null }),
+    };
+
+    mockSupabase.from.mockReturnValue(queryBuilder);
+
+    const result = await listTransactionsTool.handler({ limit: 10 });
+
+    expect(result.content[0].type).toBe("text");
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0].amount).toBe(150000); // Converted from cents to Rupiah
   });
 
-  describe("Categories Tools", () => {
-    describe("handleListCategories", () => {
-      it("should format parent and nested subcategories hierarchy", async () => {
-        (listCategories as any).mockResolvedValue([
-          {
-            id: "parent-1",
-            name: "Operasional Kantor",
-            type: "expense",
-            parentId: null,
-          },
-          {
-            id: "child-1",
-            name: "Listrik & Internet",
-            type: "expense",
-            parentId: "parent-1",
-          },
-        ]);
+  it("should execute get_balance tool and return human-readable summary text", async () => {
+    const server = createMcpServerInstance(mockAuthContext);
+    const getBalanceTool = (server as any)._registeredTools["get_balance"];
 
-        const result = await handleListCategories(mockSupabase, mockUserId, {});
+    const mockFunds = [
+      {
+        id: "f-1",
+        user_id: "user-test-uuid",
+        name: "Bank BCA",
+        type: "bank",
+        balance: 500000000, // 5,000,000 IDR
+        is_active: true,
+        created_at: "2026-10-01T00:00:00Z",
+      },
+      {
+        id: "f-2",
+        user_id: "user-test-uuid",
+        name: "Dompet GoPay",
+        type: "e-wallet",
+        balance: 25000000, // 250,000 IDR
+        is_active: true,
+        created_at: "2026-10-01T00:00:00Z",
+      },
+    ];
 
-        expect(result.content[0].text).toContain("- **Operasional Kantor** [EXPENSE]");
-        expect(result.content[0].text).toContain("└─ Listrik & Internet");
-      });
-    });
+    const queryBuilder = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      order: vi.fn().mockImplementation(() => Promise.resolve({ data: mockFunds, error: null })),
+    };
+
+    mockSupabase.from.mockReturnValue(queryBuilder);
+
+    const result = await getBalanceTool.handler({});
+
+    expect(result.content[0].text).toContain("Total Saldo Kas Bisnis: Rp5.250.000");
+    expect(result.content[0].text).toContain("Bank: Rp5.000.000");
+    expect(result.content[0].text).toContain("Dompet Digital: Rp250.000");
   });
 });
